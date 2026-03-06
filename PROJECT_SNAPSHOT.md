@@ -1,5 +1,5 @@
 # TRA FPCL — Project Snapshot
-*Last updated: March 6, 2026 (v5 — Order flow completion). Hand this file to a new chat to continue work.*
+*Last updated: March 7, 2026 (v6 — Admin Reports, RAE Management & PO PDF export). Hand this file to a new chat to continue work.*
 
 ---
 
@@ -73,7 +73,7 @@ lib/
 │   ├── offline_sync_service.dart      ← SQLite offline cache (profiles, products, orders, notifications)
 │   ├── sme_service.dart               ← SME dashboard data (models + Supabase queries)
 │   ├── supplier_service.dart          ← Supplier data layer (BulkPurchaseOrder, SupplierStats, etc.)
-│   └── admin_service.dart             ← Admin data layer (AdminStats, OrderSummary, DistrictStat)
+│   └── admin_service.dart             ← Admin data layer (AdminStats, OrderSummary, DistrictStat, ReportData, RaeInfo)
 └── screens/
     ├── auth/
     │   ├── phone_login_screen.dart    ← Role selector (RAE/SME/SUPPLIER — no ADMIN, no RAE ID field) + phone input
@@ -87,11 +87,16 @@ lib/
     │   └── supplier_dashboard.dart    ← Supplier dashboard (indigo theme)
     ├── profile/
     │   └── profile_screen.dart        ← Universal profile screen (all roles; edit name/email/district; sync status)
+    ├── rae/
+    │   ├── order_detail_screen.dart   ← Full RAE order detail with 4-step animated stepper
+    │   └── track_orders_screen.dart   ← RAE order tracking with status filters
     ├── supplier/
     │   └── catalogue_management_screen.dart ← Product catalogue CRUD for Supplier
     └── admin/
         ├── admin_dashboard.dart       ← Admin main dashboard (blue theme, web-optimised)
-        └── order_approval_screen.dart ← Order approval with Pending/Approved tabs
+        ├── order_approval_screen.dart ← Order approval: Pending/Approved/Dispatched tabs + PDF export
+        ├── reports_screen.dart        ← Reports: stat cards, monthly bar chart, district chart, status breakdown
+        └── rae_management_screen.dart ← RAE list with search, order stats, expandable breakdown
 ```
 
 ---
@@ -204,9 +209,9 @@ A **separate Flutter web application** (entry: `lib/admin_main.dart`).
 - Approved tab: order cards with Generate PO button
 
 ### ✅ Admin Service (`admin_service.dart`) — NEW
-Models: `AdminStats`, `OrderSummary`, `DistrictStat`
+Models: `AdminStats`, `OrderSummary`, `DistrictStat`, `MonthlyOrderStat`, `ReportData`, `RaeInfo`
 
-Methods: `getAdminProfile()`, `getStats()`, `getPendingOrders()`, `getAllOrders()`, `getDistrictPerformance()`, `approveOrder()` (sets status → `'confirmed'`, stores approver in notes), `rejectOrder()`
+Methods: `getAdminProfile()`, `getStats()`, `getPendingOrders()`, `getAllOrders()`, `getDistrictPerformance()`, `approveOrder()` (sets status → `'confirmed'`, stores approver in notes), `rejectOrder()`, `getSuppliers()`, `getOrderItems()`, `markDelivered()`, `notifyRAE()`, `getReportData()`, `getRaes()`
 
 ### ✅ Mobile App — Login Screen Cleanup (v3)
 - **Splash screen removed**: `AuthWrapper` now routes directly to `PhoneLoginScreen` instead of an intermediate `LoginScreen` widget with a "Sign In with Phone" button
@@ -251,7 +256,7 @@ Features:
 - `supplier_dashboard.dart`: removed `const` from `RichText` with non-const `TextSpan` children
 - `admin_service.dart`: removed `const` from `OrderSummary` constructors containing `DateTime`
 
-### ✅ v5: Order Flow Completion (latest session)
+### ✅ v5: Order Flow Completion
 
 #### Status flow standardised
 - Full status chain: `pending` → `confirmed` (admin approves) → `dispatched` (supplier ships) → `delivered` (supplier marks delivered)
@@ -294,6 +299,41 @@ Features:
 - "Mark as Delivered" button on dispatched bulk POs
 - All dispatch/invoice/delivery calls now use `raeOrder.orderUuid` (real UUID)
 
+### ✅ v6: Admin Reports, RAE Management & PO PDF Export (latest session)
+
+#### New: `lib/screens/admin/reports_screen.dart`
+- Blue header with back button
+- 2×2 summary stat cards — Total Orders, Total Revenue, Delivered, Pending
+- **Monthly Orders bar chart** — last 6 months, animated `AnimatedContainer` bars with counts
+- **Orders by District** — top-5 horizontal bar chart with revenue subtitles
+- **Order Status Breakdown** — Delivered / In Progress / Pending / Cancelled with progress bars and percentages
+- Wired to `AdminService.getReportData()` (live Supabase data + demo fallback)
+- Refresh FAB
+
+#### New: `lib/screens/admin/rae_management_screen.dart`
+- Blue header with back button
+- Live text search by name or district (real-time filter)
+- Mini stat cards: Total RAEs, Active RAEs (≥1 order)
+- Per-RAE cards: avatar with initials, district, Active/Inactive badge
+- Stat pills: Total / Done / Pending orders + revenue (green)
+- Expandable breakdown: delivered/pending/in-progress progress bars, last order date, phone
+- Wired to `AdminService.getRaes()` (live Supabase data + demo fallback)
+
+#### Modified: `lib/screens/admin/order_approval_screen.dart`
+- **PO PDF Export** fully wired — `_exportPO()` uses `pdf` + `printing` packages
+- A4 PDF: FPCL header + PO number, Bill To / Supply By party blocks, line-items table (product/qty/rate/amount), subtotal + GST 18% + grand total row
+- Delivered via `Printing.layoutPdf()` — system print/save/share dialog
+- Also added supplier picker dialog on approve flow (3rd "Dispatched" tab already present from v5)
+
+#### Modified: `lib/screens/admin/admin_dashboard.dart`
+- "Reports" quick action → `ReportsScreen` (was SnackBar)
+- "RAE Management" quick action → `RaeManagementScreen` (was SnackBar)
+
+#### Modified: `lib/services/admin_service.dart`
+- New models: `MonthlyOrderStat`, `ReportData`, `RaeInfo`
+- New methods: `getReportData()` (6-month order stats + district grouping), `getRaes()` (profiles + order stats per RAE)
+- Demo/fallback data for both (app usable with empty DB)
+
 ---
 
 ## 6. What Is Left (TODO)
@@ -314,14 +354,10 @@ Features:
 - SME should be able to send advisories/alerts to RAEs in their district
 - New table needed: `advisories` (id, sme_uid, district, title, content, created_at)
 
-#### Admin — Reports & RAE Management screens
-- Quick Action buttons exist in Admin Dashboard but currently show a SnackBar placeholder
-- Need: proper Reports screen with charts, RAE Management list screen
-
 ### 🟢 Low Priority / Polish
 - **Push notifications** — Firebase Cloud Messaging not integrated
 - **Cancelled order view** — RAE's "Completed" tab shows `cancelled` orders mixed in; a dedicated Cancelled tab would improve UX
-- **PO PDF export** — "Save PO" button in admin order approval shows a snackbar; could wire to a real PDF library (e.g., `pdf` package)
+- **Admin — Suppliers screen** — "Suppliers" quick action tile in Admin Dashboard still shows a SnackBar placeholder
 - **SME Dashboard chat** — conversations are view-only; full chat not built
 
 ---
@@ -424,4 +460,6 @@ dependencies:
   connectivity_plus: ^6.0.5
   path: ^1.9.0
   cupertino_icons: ^1.0.8
+  pdf: ^3.11.1          # PO PDF generation
+  printing: ^5.13.1     # Print/save/share PDF dialog
 ```
