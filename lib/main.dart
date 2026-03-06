@@ -8,6 +8,7 @@ import 'services/cart_service.dart';
 import 'screens/auth/phone_login_screen.dart';
 import 'screens/dashboard/rae_dashboard.dart';
 import 'screens/dashboard/sme_dashboard.dart';
+import 'screens/dashboard/supplier_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -177,10 +178,8 @@ class DashboardRouter extends StatelessWidget {
               child: Placeholder(), // TODO: Create AdminDashboard
             );
           case 'SUPPLIER':
-            return const DashboardShell(
-              title: 'Supplier Dashboard',
-              child: Placeholder(), // TODO: Create SupplierDashboard
-            );
+            // SupplierDashboard has its own full-bleed Scaffold (indigo header + FAB).
+            return const SupplierDashboard();
           default:
             return const DashboardShell(
               title: 'Dashboard',
