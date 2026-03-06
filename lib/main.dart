@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'firebase_options.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_service.dart';
@@ -14,7 +15,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   
   // Initialize Supabase
   await Supabase.initialize(
@@ -173,9 +174,56 @@ class DashboardRouter extends StatelessWidget {
             // Return it directly — no DashboardShell wrapper needed.
             return const SMEDashboard();
           case 'ADMIN':
-            return const DashboardShell(
-              title: 'Admin Dashboard',
-              child: Placeholder(), // TODO: Create AdminDashboard
+            return Scaffold(
+              backgroundColor: const Color(0xFFF3F4F6),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(Icons.web_outlined,
+                          size: 44, color: Color(0xFF2563EB)),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Admin Portal — Web Only',
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF111827)),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'The FPCL Admin dashboard is only available\non the web portal.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 14, color: Color(0xFF6B7280)),
+                    ),
+                    const SizedBox(height: 28),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Sign Out'),
+                      onPressed: () async {
+                        await AuthService().signOut();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 28, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           case 'SUPPLIER':
             // SupplierDashboard has its own full-bleed Scaffold (indigo header + FAB).

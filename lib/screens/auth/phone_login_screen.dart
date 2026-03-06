@@ -19,7 +19,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   String _selectedRole = 'RAE';
   bool _isLoading = false;
 
-  final List<String> _roles = ['RAE', 'SME', 'ADMIN', 'SUPPLIER'];
+  final List<String> _roles = ['RAE', 'SME', 'SUPPLIER'];
 
   @override
   void dispose() {
