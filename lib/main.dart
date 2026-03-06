@@ -7,6 +7,7 @@ import 'services/auth_service.dart';
 import 'services/cart_service.dart';
 import 'screens/auth/phone_login_screen.dart';
 import 'screens/dashboard/rae_dashboard.dart';
+import 'screens/dashboard/sme_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +17,8 @@ void main() async {
   
   // Initialize Supabase
   await Supabase.initialize(
-    url: 'https://ootfxnlzoakvrajupnmf.supabase.co/',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vdGZ4bmx6b2FrdnJhanVwbm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMTAxODEsImV4cCI6MjA4NTY4NjE4MX0.daJbeQcHh4JatgsP2ReKF4uBNbOCkjDAyimHeyt2STs',
+    url: 'https://hwlwxzyrcaxjjlnnokxk.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3bHd4enlyY2F4ampsbm5va3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NjcxMDgsImV4cCI6MjA4ODM0MzEwOH0.RnR9KTt-tUVej8qSkOMCpiJy6AzvVzOiJrBZl2r43Fg',
   );
   
   runApp(const MyApp());
@@ -121,7 +122,43 @@ class DashboardRouter extends StatelessWidget {
         }
 
         final profile = snapshot.data;
-        final role = profile?['role'] ?? 'RAE';
+
+        // If BOTH cache and Supabase failed, show a recovery screen instead of
+        // silently routing to RAE (which was masking the real error before).
+        if (profile == null) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Could not load your profile',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Check your internet connection and try again.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await AuthService().signOut();
+                      },
+                      child: const Text('Sign Out & Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final role = profile['role']?.toString() ?? 'RAE';
 
         // Route to role-specific dashboard
         switch (role) {
@@ -131,10 +168,9 @@ class DashboardRouter extends StatelessWidget {
               child: RAEDashboard(),
             );
           case 'SME':
-            return const DashboardShell(
-              title: 'SME Dashboard',
-              child: Placeholder(), // TODO: Create SMEDashboard
-            );
+            // SMEDashboard has its own full-bleed Scaffold (purple header + FAB).
+            // Return it directly — no DashboardShell wrapper needed.
+            return const SMEDashboard();
           case 'ADMIN':
             return const DashboardShell(
               title: 'Admin Dashboard',
@@ -156,11 +192,18 @@ class DashboardRouter extends StatelessWidget {
   }
 
   Future<Map<String, dynamic>?> _getUserProfile() async {
-    final supabase = Supabase.instance.client;
     final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    
     if (firebaseUser == null) return null;
 
+    // ── 1. Fast path: SharedPreferences (set during login, no network needed)
+    final cachedRole = await AuthService().getCachedRole();
+    if (cachedRole != null) {
+      debugPrint('✅ Role loaded from cache: $cachedRole');
+      return {'role': cachedRole, 'uid': firebaseUser.uid};
+    }
+
+    // ── 2. Fallback: fetch from Supabase (first install or cache cleared)
+    final supabase = Supabase.instance.client;
     try {
       final response = await supabase
           .from('profiles')
@@ -169,12 +212,17 @@ class DashboardRouter extends StatelessWidget {
           .maybeSingle()
           .timeout(const Duration(seconds: 5));
 
+      if (response != null && response['role'] != null) {
+        // Populate cache from Supabase result so future launches are instant
+        await AuthService().cacheRole(response['role'].toString());
+        debugPrint('✅ Role loaded from Supabase: ${response['role']}');
+      }
       return response;
     } catch (e) {
-      print('⚠️ Error fetching profile: $e');
-      print('💡 Using default role: RAE');
-      // Return default profile if Supabase fails
-      return {'role': 'RAE', 'uid': firebaseUser.uid};
+      debugPrint('⚠️ Error fetching profile from Supabase: $e');
+      // Return null — the switch default below will show a "role unknown" screen
+      // rather than silently falling back to RAE.
+      return null;
     }
   }
 }

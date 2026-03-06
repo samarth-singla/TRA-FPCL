@@ -38,6 +38,7 @@ dependencies:
   firebase_auth: ^5.3.4
   supabase_flutter: ^2.9.2
   provider: ^6.1.1
+  shared_preferences: ^2.3.3
 
 dev_dependencies:
   flutter_test:

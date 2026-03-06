@@ -39,6 +39,11 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
         phoneNumber = '+91$phoneNumber'; // Default to India
       }
 
+      // ── FIX: Set role BEFORE sendOTP so that the Android
+      // verificationCompleted callback already has the correct role
+      // when it fires automatically (before user types OTP).
+      _authService.setRole(_selectedRole);
+
       // Send OTP using AuthService
       await _authService.sendOTP(phoneNumber);
 

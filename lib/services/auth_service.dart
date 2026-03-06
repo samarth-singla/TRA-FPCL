@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {  // Singleton pattern
@@ -17,47 +18,93 @@ class AuthService {  // Singleton pattern
 
   /// Verification ID for phone auth
   String? _verificationId;
-  
-  /// Selected role for new user registration
+
+  /// Selected role — set BEFORE sendOTP so verificationCompleted can use it
   String? _selectedRole;
 
-  /// Send OTP to phone number
-  /// Returns true if OTP was sent successfully
+  /// SharedPreferences key for persisting role across app restarts
+  static const _roleKey = 'user_role';
+
+  // -----------------------------------------------------------------------
+  // Role helpers
+  // -----------------------------------------------------------------------
+
+  /// Call this in PhoneLoginScreen BEFORE sendOTP so the auto-verification
+  /// callback (verificationCompleted) already has the correct role.
+  void setRole(String role) {
+    _selectedRole = role;
+    print('🏷️ Role pre-set to: $role');
+  }
+
+  /// Persist role to device storage.
+  Future<void> cacheRole(String role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_roleKey, role);
+    print('💾 Role cached locally: $role');
+  }
+
+  /// Read the locally cached role. Returns null if never set.
+  Future<String?> getCachedRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_roleKey);
+  }
+
+  /// Clear cached role on sign-out.
+  Future<void> clearCachedRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_roleKey);
+    print('🗑️ Cached role cleared');
+  }
+
+  /// Send OTP to phone number.
+  /// Uses a Completer so this method only returns AFTER codeSent fires,
+  /// ensuring _verificationId is always set before the OTP screen is shown.
   Future<bool> sendOTP(String phoneNumber) async {
-    try {
-      print('📱 Sending OTP to: $phoneNumber');
-      print('ℹ️ If using test number, enter the test code you configured in Firebase');
-      
-      await _firebaseAuth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        verificationCompleted: (firebase_auth.PhoneAuthCredential credential) async {
-          // Auto-verification completed (Android only)
-          print('✅ Auto verification completed');
+    print('📱 Sending OTP to: $phoneNumber');
+    print('ℹ️ Only Firebase test numbers work without billing enabled.');
+
+    final completer = Completer<bool>();
+
+    await _firebaseAuth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      verificationCompleted: (firebase_auth.PhoneAuthCredential credential) async {
+        // Auto-verification (Android only) — sign in immediately.
+        print('✅ Auto verification completed');
+        try {
           await _signInWithCredential(credential);
-        },
-        verificationFailed: (firebase_auth.FirebaseAuthException e) {
-          print('❌ Verification failed: ${e.code} - ${e.message}');
-          if (e.code == 'invalid-phone-number') {
-            throw Exception('Invalid phone number format. Use: +919999999999');
-          }
-          throw Exception('Verification failed: ${e.message}');
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          print('✅ OTP sent! Verification ID: ${verificationId.substring(0, 10)}...');
-          print('📝 For test numbers: Enter your configured test code (e.g., 123456)');
-          _verificationId = verificationId;
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          print('⏱️ Auto-retrieval timeout');
-          _verificationId = verificationId;
-        },
-        timeout: const Duration(seconds: 60),
-      );
-      return true;
-    } catch (e) {
-      print('❌ Failed to send OTP: $e');
-      throw Exception('Failed to send OTP: $e');
-    }
+        } catch (e) {
+          print('❌ Auto sign-in failed: $e');
+        }
+        if (!completer.isCompleted) completer.complete(true);
+      },
+      verificationFailed: (firebase_auth.FirebaseAuthException e) {
+        print('❌ Verification failed: ${e.code} - ${e.message}');
+        if (completer.isCompleted) return;
+        if (e.code == 'invalid-phone-number') {
+          completer.completeError(
+              Exception('Invalid phone number. Use format: +91XXXXXXXXXX'));
+        } else if (e.message?.contains('BILLING_NOT_ENABLED') == true) {
+          completer.completeError(Exception(
+              'Real phone numbers require Firebase billing (Blaze plan). '
+              'Please use a Firebase test number instead.'));
+        } else {
+          completer.completeError(Exception('Verification failed: ${e.message}'));
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        print('✅ OTP sent! Verification ID: ${verificationId.substring(0, 10)}...');
+        _verificationId = verificationId;
+        if (!completer.isCompleted) completer.complete(true);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        print('⏱️ Auto-retrieval timeout');
+        _verificationId = verificationId;
+      },
+      timeout: const Duration(seconds: 60),
+    );
+
+    // Wait for codeSent or verificationFailed before returning.
+    return completer.future;
   }
 
   /// Verify OTP and sign in with selected role
@@ -130,45 +177,64 @@ class AuthService {  // Singleton pattern
     }
   }
 
-  /// Check if profile exists in Supabase, create if it doesn't
+  /// Check if profile exists in Supabase.
+  /// - If it doesn't exist: create it with the selected role.
+  /// - If it exists AND the user selected a different role at login: update it.
+  ///   This allows role switching during development / multi-role accounts.
   Future<void> _ensureProfileExists(String uid, String? phoneNumber) async {
     try {
       print('📊 Checking profile for UID: $uid');
-      
-      // Check if profile exists
+
       final response = await _supabase
           .from('profiles')
           .select()
           .eq('uid', uid)
           .maybeSingle();
 
+      final selectedRole = _selectedRole ?? 'RAE';
+
       if (response == null) {
-        // Profile doesn't exist, create it with the selected role
-        final role = _selectedRole ?? 'RAE'; // Use selected role or default to RAE
-        
-        print('📝 Creating new profile with role: $role');
-        
+        // ── New user: create profile ──────────────────────────────
+        print('📝 Creating new profile with role: $selectedRole');
         await _supabase.from('profiles').insert({
           'uid': uid,
           'phone': phoneNumber ?? '',
-          'role': role,
+          'role': selectedRole,
           'created_at': DateTime.now().toIso8601String(),
         });
-
-        print('✅ New profile created for UID: $uid with role: $role');
-        
-        // Clear the selected role after use
-        _selectedRole = null;
+        print('✅ New profile created for UID: $uid with role: $selectedRole');
       } else {
-        print('ℹ️ Profile already exists for UID: $uid');
+        // ── Existing user: update role if it changed ──────────────
+        final storedRole = response['role']?.toString() ?? 'RAE';
+        if (_selectedRole != null && _selectedRole != storedRole) {
+          print('🔄 Role changed: $storedRole → $selectedRole. Updating profile…');
+          await _supabase.from('profiles').update({
+            'role': selectedRole,
+            'updated_at': DateTime.now().toIso8601String(),
+          }).eq('uid', uid);
+          print('✅ Profile role updated to: $selectedRole');
+        } else {
+          print('ℹ️ Profile exists with role: $storedRole (no change)');
+        }
       }
+
+      // ── Always cache the role locally so routing survives Supabase failures
+      await cacheRole(selectedRole);
+
+      // Always clear the in-memory role selection after use
+      _selectedRole = null;
     } on SocketException catch (e) {
-      print('⚠️ Network error creating profile: $e');
-      print('💡 Continuing without Supabase - profile will be created on next login');
-      // Don't throw - allow user to proceed
+      print('⚠️ Network error syncing profile: $e');
+      // Still cache whatever role we intended to use
+      if (_selectedRole != null) await cacheRole(_selectedRole!);
+      _selectedRole = null;
+      print('💡 Role cached locally. Supabase will sync on next login.');
+      // Don't throw — Firebase auth succeeded, let the user in
     } catch (e) {
       print('⚠️ Error ensuring profile exists: $e');
-      // Don't throw - allow Firebase auth to succeed even if Supabase fails
+      // Still cache whatever role we intended to use
+      if (_selectedRole != null) await cacheRole(_selectedRole!);
+      _selectedRole = null;
       print('💡 Firebase authentication successful. Profile sync will retry later.');
     }
   }
@@ -218,9 +284,10 @@ class AuthService {  // Singleton pattern
     }
   }
 
-  /// Sign out from both Firebase and Supabase
+  /// Sign out from both Firebase and Supabase and clear local cache
   Future<void> signOut() async {
     try {
+      await clearCachedRole();
       await _firebaseAuth.signOut();
       await _supabase.auth.signOut();
     } catch (e) {

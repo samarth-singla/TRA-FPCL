@@ -1,16 +1,19 @@
 -- Supabase Tables for TRA FPCL Application
 -- Run these SQL commands in Supabase SQL Editor
 
--- 1. Profiles Table (Already exists, just for reference)
--- CREATE TABLE IF NOT EXISTS profiles (
---   uid TEXT PRIMARY KEY,
---   phone TEXT,
---   role TEXT DEFAULT 'RAE',
---   name TEXT,
---   email TEXT,
---   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
---   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
--- );
+-- 1. Profiles Table
+CREATE TABLE IF NOT EXISTS profiles (
+  uid TEXT PRIMARY KEY,
+  phone TEXT,
+  role TEXT DEFAULT 'RAE',
+  name TEXT,
+  email TEXT,
+  district TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 
 -- 2. Products Table
 CREATE TABLE IF NOT EXISTS products (
@@ -104,93 +107,87 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_uid ON notifications(user_uid)
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 
--- 6. Enable Row Level Security (RLS)
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+-- 6. Disable Row Level Security on all tables
+-- This app uses Firebase Auth (not Supabase Auth), so auth.uid() is always
+-- NULL. RLS with auth.uid() checks would block ALL reads/writes silently.
+-- Security is handled by Firebase Auth on the client side.
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
 
--- 7. RLS Policies for Products Table
--- All authenticated users can view active products
-CREATE POLICY "Users can view active products" ON products
-  FOR SELECT
-  USING (is_active = true);
-
--- Only admins can insert/update/delete products (managed by backend/admin panel)
-CREATE POLICY "Admins can manage products" ON products
-  FOR ALL
-  USING (true);
-
--- 8. RLS Policies for Orders Table
--- RAE can see their own orders
-CREATE POLICY "RAE can view their orders" ON orders
-  FOR SELECT
-  USING (rae_uid = auth.uid());
-
--- RAE can create orders
-CREATE POLICY "RAE can create orders" ON orders
-  FOR INSERT
-  WITH CHECK (rae_uid = auth.uid());
-
--- RAE can update their orders
-CREATE POLICY "RAE can update their orders" ON orders
-  FOR UPDATE
-  USING (rae_uid = auth.uid());
-
--- SME can see assigned orders
-CREATE POLICY "SME can view assigned orders" ON orders
-  FOR SELECT
-  USING (sme_uid = auth.uid());
-
--- Supplier can see their orders
-CREATE POLICY "Supplier can view their orders" ON orders
-  FOR SELECT
-  USING (supplier_uid = auth.uid());
-
--- 9. RLS Policies for Order Items Table
--- Users can view order items for their own orders
-CREATE POLICY "Users can view their order items" ON order_items
-  FOR SELECT
-  USING (
-    order_id IN (
-      SELECT id FROM orders 
-      WHERE rae_uid = auth.uid() 
-         OR sme_uid = auth.uid() 
-         OR supplier_uid = auth.uid()
-    )
-  );
-
--- Users can insert order items for their own orders
-CREATE POLICY "Users can create order items" ON order_items
-  FOR INSERT
-  WITH CHECK (
-    order_id IN (
-      SELECT id FROM orders WHERE rae_uid = auth.uid()
-    )
-  );
-
--- 10. RLS Policies for Notifications Table
--- Users can only see their own notifications
-CREATE POLICY "Users can view their notifications" ON notifications
-  FOR SELECT
-  USING (user_uid = auth.uid());
-
--- Users can update their own notifications (mark as read)
-CREATE POLICY "Users can update their notifications" ON notifications
-  FOR UPDATE
-  USING (user_uid = auth.uid());
-
--- System can create notifications for any user (managed by backend)
-CREATE POLICY "System can create notifications" ON notifications
-  FOR INSERT
-  WITH CHECK (true);
-
--- 11. Realtime Subscriptions (Enable realtime for Flutter StreamBuilder)
--- Run this to enable realtime on these tables
+-- 11. Realtime Subscriptions for core tables
 ALTER PUBLICATION supabase_realtime ADD TABLE products;
 ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
 ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+
+-- ============================================================
+-- SME (District Advisor) Tables
+-- ============================================================
+
+-- SME Conversations Table
+CREATE TABLE IF NOT EXISTS conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rae_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  sme_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  rae_name TEXT NOT NULL DEFAULT '',
+  rae_code TEXT NOT NULL DEFAULT '',
+  last_message TEXT NOT NULL DEFAULT '',
+  last_message_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  unread_count INTEGER NOT NULL DEFAULT 0,
+  is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_sme_uid ON conversations(sme_uid);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC);
+
+-- SME Issues / Complaints Table
+CREATE TABLE IF NOT EXISTS issues (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rae_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  sme_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  rae_name TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  resolved_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_issues_sme_uid ON issues(sme_uid);
+CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+CREATE INDEX IF NOT EXISTS idx_issues_created_at ON issues(created_at DESC);
+
+-- SME Performance Metrics Table
+CREATE TABLE IF NOT EXISTS sme_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sme_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  active_raes INTEGER NOT NULL DEFAULT 0,
+  total_raes INTEGER NOT NULL DEFAULT 50,
+  villages_covered INTEGER NOT NULL DEFAULT 0,
+  farmers_served INTEGER NOT NULL DEFAULT 0,
+  district TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sme_metrics_sme_uid ON sme_metrics(sme_uid);
+
+-- Disable RLS on SME tables (same reason: Firebase Auth, not Supabase Auth)
+ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE issues DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sme_metrics DISABLE ROW LEVEL SECURITY;
+
+-- Realtime Subscriptions for SME tables
+ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE issues;
+
+-- Sample seed data for SME (replace 'REPLACE_WITH_SME_UID' with actual uid)
+-- INSERT INTO conversations (rae_uid, sme_uid, rae_name, rae_code, last_message, unread_count)
+-- VALUES ('rae_uid_here', 'sme_uid_here', 'Ramesh Kumar', 'RAE-HYD-001', 'Need advice on cotton seeds', 2);
 
 -- 12. Sample Data for Testing (Optional)
 -- Insert sample products
