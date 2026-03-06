@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../../services/sme_service.dart';
+import '../profile/profile_screen.dart';
 
 /// SME District Advisor Dashboard
 ///
@@ -907,8 +908,10 @@ class _SMEDashboardState extends State<SMEDashboard> {
                 title: const Text('My Profile'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Profile – Coming Soon')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ProfileScreen()),
                   );
                 },
               ),

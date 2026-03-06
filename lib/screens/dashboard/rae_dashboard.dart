@@ -5,6 +5,7 @@ import '../catalog/product_catalog_screen.dart';
 import '../catalog/shopping_cart_screen.dart';
 import '../rae/track_orders_screen.dart';
 import '../rae/earnings_screen.dart';
+import '../profile/profile_screen.dart';
 import '../../services/auth_service.dart';
 
 class RAEDashboard extends StatefulWidget {
@@ -138,7 +139,11 @@ class _RAEDashboardState extends State<RAEDashboard> {
                 IconButton(
                   icon: const Icon(Icons.person_outline,
                       color: Colors.white, size: 26),
-                  onPressed: () {},
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ProfileScreen()),
+                  ),
                 ),
               ],
             ),
@@ -555,6 +560,12 @@ class _RAEDashboardState extends State<RAEDashboard> {
                 MaterialPageRoute(builder: (_) => const EarningsScreen()));
           }),
           const SizedBox(height: 8),
+          _fabOption(context, Icons.manage_accounts_outlined, 'My Profile', () {
+            setState(() => _fabOpen = false);
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          }),
+          const SizedBox(height: 8),
           _fabOption(context, Icons.logout, 'Sign Out', () async {
             setState(() => _fabOpen = false);
             await AuthService().signOut();
@@ -617,6 +628,19 @@ class _RAEDashboardState extends State<RAEDashboard> {
               leading: const Icon(Icons.person_outline),
               title: Text(_raeName),
               subtitle: const Text('Rural Agripreneur Executive'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('My Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ProfileScreen()),
+                );
+              },
             ),
             const Divider(),
             ListTile(

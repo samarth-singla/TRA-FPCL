@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_service.dart';
 import 'services/cart_service.dart';
+import 'services/offline_sync_service.dart';
 import 'screens/auth/phone_login_screen.dart';
 import 'screens/dashboard/rae_dashboard.dart';
 import 'screens/dashboard/sme_dashboard.dart';
@@ -22,7 +23,10 @@ void main() async {
     url: 'https://hwlwxzyrcaxjjlnnokxk.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3bHd4enlyY2F4ampsbm5va3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NjcxMDgsImV4cCI6MjA4ODM0MzEwOH0.RnR9KTt-tUVej8qSkOMCpiJy6AzvVzOiJrBZl2r43Fg',
   );
-  
+
+  // Initialize offline SQLite cache (mobile only — no-op on web)
+  await OfflineSyncService().init();
+
   runApp(const MyApp());
 }
 
@@ -240,6 +244,8 @@ class DashboardRouter extends StatelessWidget {
     final cachedRole = await AuthService().getCachedRole();
     if (cachedRole != null) {
       debugPrint('✅ Role loaded from cache: $cachedRole');
+      // Kick off background sync (doesn't block routing)
+      OfflineSyncService().syncAll(firebaseUser.uid).ignore();
       return {'role': cachedRole, 'uid': firebaseUser.uid};
     }
 
@@ -257,6 +263,8 @@ class DashboardRouter extends StatelessWidget {
         // Populate cache from Supabase result so future launches are instant
         await AuthService().cacheRole(response['role'].toString());
         debugPrint('✅ Role loaded from Supabase: ${response['role']}');
+        // Background sync
+        OfflineSyncService().syncAll(firebaseUser.uid).ignore();
       }
       return response;
     } catch (e) {

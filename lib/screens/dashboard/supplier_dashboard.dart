@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../services/supplier_service.dart';
 import '../../services/auth_service.dart';
 import '../supplier/catalogue_management_screen.dart';
+import '../profile/profile_screen.dart';
 
 /// Supplier Portal Dashboard
 ///
@@ -795,6 +796,18 @@ class _SupplierDashboardState extends State<SupplierDashboard> {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Reports – Coming Soon')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('My Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ProfileScreen()),
                 );
               },
             ),
