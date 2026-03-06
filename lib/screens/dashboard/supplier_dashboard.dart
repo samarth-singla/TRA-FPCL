@@ -137,7 +137,7 @@ class _SupplierDashboardState extends State<SupplierDashboard> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.4,
+          childAspectRatio: 1.2,
           children: [
             _statCard(
               icon: Icons.description_outlined,
