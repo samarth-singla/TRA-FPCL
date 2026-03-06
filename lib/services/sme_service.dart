@@ -5,9 +5,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ConversationItem {
   final String id;
   final String raeUid;
-  final String smeUid;
+  final String? smeUid; // Nullable for pending requests
   final String raeName;
   final String raeCode;
+  final String raeDistrict;
+  final String status; // 'pending' | 'active' | 'resolved'
   final String lastMessage;
   final DateTime lastMessageAt;
   final int unreadCount;
@@ -16,9 +18,11 @@ class ConversationItem {
   ConversationItem({
     required this.id,
     required this.raeUid,
-    required this.smeUid,
+    this.smeUid,
     required this.raeName,
     required this.raeCode,
+    required this.raeDistrict,
+    required this.status,
     required this.lastMessage,
     required this.lastMessageAt,
     required this.unreadCount,
@@ -29,15 +33,23 @@ class ConversationItem {
     return ConversationItem(
       id: map['id']?.toString() ?? '',
       raeUid: map['rae_uid']?.toString() ?? '',
-      smeUid: map['sme_uid']?.toString() ?? '',
+      smeUid: map['sme_uid']?.toString(),
       raeName: map['rae_name']?.toString() ?? '',
       raeCode: map['rae_code']?.toString() ?? '',
+      raeDistrict: map['rae_district']?.toString() ?? '',
+      status: map['status']?.toString() ?? 'pending',
       lastMessage: map['last_message']?.toString() ?? '',
       lastMessageAt: DateTime.tryParse(map['last_message_at']?.toString() ?? '') ?? DateTime.now(),
       unreadCount: (map['unread_count'] as num?)?.toInt() ?? 0,
       isResolved: map['is_resolved'] as bool? ?? false,
     );
   }
+
+  // Helper method to check if conversation is pending
+  bool get isPending => status == 'pending';
+  
+  // Helper method to check if conversation is active
+  bool get isActive => status == 'active';
 }
 
 /// Model for an issue / complaint
@@ -188,12 +200,15 @@ class SmeService {
   // -----------------------------------------------------------------------
 
   /// Stream of conversations for this SME, newest first.
+  /// Only returns active conversations (not pending requests).
   Stream<List<ConversationItem>> conversationsStream(String smeUid) {
     return _supabase
         .from('conversations')
         .stream(primaryKey: ['id'])
         .map((rows) {
-          final filtered = rows.where((r) => r['sme_uid'] == smeUid).toList();
+          final filtered = rows.where((r) {
+            return r['sme_uid'] == smeUid && r['status'] == 'active';
+          }).toList();
           filtered.sort((a, b) {
             final dateA = DateTime.tryParse(a['last_message_at'] ?? '') ?? DateTime.now();
             final dateB = DateTime.tryParse(b['last_message_at'] ?? '') ?? DateTime.now();
@@ -206,6 +221,43 @@ class SmeService {
   /// Count of conversations with unread messages
   int countUnread(List<ConversationItem> conversations) {
     return conversations.where((c) => c.unreadCount > 0).length;
+  }
+
+  /// Stream of pending advisory requests for this SME's district
+  Stream<List<ConversationItem>> pendingRequestsStream(String smeDistrict) {
+    return _supabase
+        .from('conversations')
+        .stream(primaryKey: ['id'])
+        .map((rows) {
+          final filtered = rows.where((r) {
+            return r['status'] == 'pending' && r['rae_district'] == smeDistrict;
+          }).toList();
+          
+          // Sort by creation time, newest first
+          filtered.sort((a, b) {
+            final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.now();
+            final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.now();
+            return dateB.compareTo(dateA);
+          });
+          
+          return filtered.map(ConversationItem.fromMap).toList();
+        });
+  }
+
+  /// Accept a pending advisory request (assign SME and activate conversation)
+  Future<void> acceptAdvisoryRequest({
+    required String conversationId,
+    required String smeUid,
+  }) async {
+    // Update conversation with SME assignment and status change
+    await _supabase
+        .from('conversations')
+        .update({
+          'sme_uid': smeUid,
+          'status': 'active',
+        })
+        .eq('id', conversationId)
+        .eq('status', 'pending'); // Only update if still pending (race condition protection)
   }
 
   // -----------------------------------------------------------------------

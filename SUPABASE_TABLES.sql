@@ -130,9 +130,11 @@ ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   rae_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
-  sme_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  sme_uid TEXT REFERENCES profiles(uid) ON DELETE SET NULL, -- NULL for pending requests
   rae_name TEXT NOT NULL DEFAULT '',
   rae_code TEXT NOT NULL DEFAULT '',
+  rae_district TEXT NOT NULL DEFAULT '', -- RAE's district for matching SMEs
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'resolved')),
   last_message TEXT NOT NULL DEFAULT '',
   last_message_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   unread_count INTEGER NOT NULL DEFAULT 0,
@@ -141,7 +143,25 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversations_sme_uid ON conversations(sme_uid);
+CREATE INDEX IF NOT EXISTS idx_conversations_rae_district ON conversations(rae_district);
+CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
 CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC);
+
+-- Messages Table (for chat between SME and RAE)
+CREATE TABLE IF NOT EXISTS messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  sender_name TEXT NOT NULL,
+  sender_role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_uid ON messages(sender_uid);
 
 -- SME Issues / Complaints Table
 CREATE TABLE IF NOT EXISTS issues (
@@ -178,11 +198,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sme_metrics_sme_uid ON sme_metrics(sme_uid
 
 -- Disable RLS on SME tables (same reason: Firebase Auth, not Supabase Auth)
 ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE issues DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sme_metrics DISABLE ROW LEVEL SECURITY;
 
 -- Realtime Subscriptions for SME tables
 ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE issues;
 
 -- Sample seed data for SME (replace 'REPLACE_WITH_SME_UID' with actual uid)

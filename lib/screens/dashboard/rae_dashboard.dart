@@ -5,6 +5,8 @@ import '../catalog/product_catalog_screen.dart';
 import '../catalog/shopping_cart_screen.dart';
 import '../rae/track_orders_screen.dart';
 import '../rae/earnings_screen.dart';
+import '../rae/request_advisory_screen.dart';
+import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../services/auth_service.dart';
 
@@ -61,6 +63,8 @@ class _RAEDashboardState extends State<RAEDashboard> {
                     child: Column(
                       children: [
                         _buildActionsGrid(context),
+                        const SizedBox(height: 20),
+                        _buildMyConversationsSection(),
                         const SizedBox(height: 20),
                         _buildRecentAlerts(),
                         const SizedBox(height: 20),
@@ -292,6 +296,9 @@ class _RAEDashboardState extends State<RAEDashboard> {
                 } else if (t == 'Track Orders') {
                   Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const TrackOrdersScreen()));
+                } else if (t == 'Advisory') {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const RequestAdvisoryScreen()));
                 } else if (t == 'Earnings') {
                   Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const EarningsScreen()));
@@ -373,6 +380,235 @@ class _RAEDashboardState extends State<RAEDashboard> {
         ),
       ),
     );
+  }
+
+  // ── My Advisory Conversations ─────────────────────────────────────────
+
+  Widget _buildMyConversationsSection() {
+    final uid = _fbUser?.uid ?? '';
+    
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _supabase
+          .from('conversations')
+          .stream(primaryKey: ['id'])
+          .map((rows) {
+            // Filter conversations for this RAE
+            final filtered = rows.where((r) {
+              return r['rae_uid'] == uid && 
+                     r['status'] != null && 
+                     (r['status'] == 'active' || r['status'] == 'pending');
+            }).toList();
+            
+            // Sort by last message time
+            filtered.sort((a, b) {
+              final dateA = DateTime.tryParse(a['last_message_at']?.toString() ?? '') ?? DateTime.now();
+              final dateB = DateTime.tryParse(b['last_message_at']?.toString() ?? '') ?? DateTime.now();
+              return dateB.compareTo(dateA);
+            });
+            
+            return filtered;
+          }),
+      builder: (context, snapshot) {
+        final conversations = snapshot.data ?? [];
+        
+        if (conversations.isEmpty) {
+          return const SizedBox.shrink(); // Hide when no conversations
+        }
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section header
+            const Row(
+              children: [
+                Icon(Icons.chat_bubble_outline, size: 18, color: Color(0xFF7B1FA2)),
+                SizedBox(width: 8),
+                Text(
+                  'My Advisory Conversations',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Conversations list
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  children: conversations.map((convo) {
+                    return _buildConversationTile(convo);
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildConversationTile(Map<String, dynamic> convo) {
+    final status = convo['status']?.toString() ?? 'pending';
+    final isPending = status == 'pending';
+    final smeUid = convo['sme_uid']?.toString();
+    final lastMessage = convo['last_message']?.toString() ?? '';
+    final lastMessageAt = DateTime.tryParse(convo['last_message_at']?.toString() ?? '') ?? DateTime.now();
+    final timeStr = _formatConversationTime(lastMessageAt);
+    
+    // For pending, show status message
+    final displayTitle = isPending ? 'Waiting for SME to accept...' : 'Advisory with SME';
+    final displayMessage = isPending ? lastMessage : lastMessage;
+    
+    return InkWell(
+      onTap: () {
+        if (isPending) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Waiting for an SME to accept your request...'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+        
+        // Navigate to chat screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversationId: convo['id']?.toString() ?? '',
+              raeName: convo['rae_name']?.toString() ?? '',
+              raeCode: convo['rae_code']?.toString() ?? '',
+              raeUid: convo['rae_uid']?.toString() ?? '',
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isPending ? Colors.orange.shade50 : Colors.white,
+          border: Border(
+            left: BorderSide(
+              color: isPending ? Colors.orange : const Color(0xFF7B1FA2),
+              width: 4,
+            ),
+            bottom: BorderSide(color: Colors.grey[100]!, width: 1),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isPending 
+                    ? Colors.orange.shade100 
+                    : const Color(0xFF7B1FA2).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isPending ? Icons.pending : Icons.chat,
+                color: isPending ? Colors.orange : const Color(0xFF7B1FA2),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        displayTitle,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isPending ? Colors.orange.shade800 : Colors.black87,
+                        ),
+                      ),
+                      if (isPending) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'PENDING',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    displayMessage,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[400],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Arrow
+            Icon(
+              Icons.chevron_right,
+              color: Colors.grey[400],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatConversationTime(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   // ── Recent Alerts ─────────────────────────────────────────────────────

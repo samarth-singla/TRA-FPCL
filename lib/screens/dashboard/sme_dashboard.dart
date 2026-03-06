@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../../services/sme_service.dart';
 import '../profile/profile_screen.dart';
+import '../chat/chat_screen.dart';
 
 /// SME District Advisor Dashboard
 ///
@@ -57,6 +58,11 @@ class _SMEDashboardState extends State<SMEDashboard> {
                   children: [
                     // ── Stat cards grid ────────────────────────────
                     _buildStatCardsGrid(),
+
+                    const SizedBox(height: 20),
+
+                    // ── Pending Advisory Requests ──────────────────
+                    _buildPendingRequestsSection(),
 
                     const SizedBox(height: 20),
 
@@ -379,8 +385,17 @@ class _SMEDashboardState extends State<SMEDashboard> {
 
     return InkWell(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chat interface – Coming Soon')),
+        // Navigate to chat screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversationId: convo.id,
+              raeName: convo.raeName,
+              raeCode: convo.raeCode,
+              raeUid: convo.raeUid,
+            ),
+          ),
         );
       },
       child: Container(
@@ -463,6 +478,232 @@ class _SMEDashboardState extends State<SMEDashboard> {
         ),
       ),
     );
+  }
+
+  // -----------------------------------------------------------------
+  // Pending Advisory Requests
+  // -----------------------------------------------------------------
+
+  Widget _buildPendingRequestsSection() {
+    return FutureBuilder<String?>(
+      future: _smeService.getSmeProfile(_smeUid).then((p) => p['district']),
+      builder: (context, districtSnapshot) {
+        final smeDistrict = districtSnapshot.data ?? '';
+        
+        if (smeDistrict.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return StreamBuilder<List<ConversationItem>>(
+          stream: _smeService.pendingRequestsStream(smeDistrict),
+          builder: (context, snapshot) {
+            final pendingRequests = snapshot.data ?? [];
+
+            if (pendingRequests.isEmpty) {
+              return const SizedBox.shrink(); // Hide section when no pending requests
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Section header
+                Row(
+                  children: [
+                    const Icon(Icons.pending_actions, size: 18, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Pending Advisory Requests',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade600,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${pendingRequests.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      children: pendingRequests
+                          .map((req) => _buildPendingRequestTile(req))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPendingRequestTile(ConversationItem request) {
+    final timeStr = _formatTime(request.lastMessageAt);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        border: Border(
+          left: BorderSide(
+            color: Colors.orange.shade600,
+            width: 4,
+          ),
+          bottom: BorderSide(color: Colors.grey[100]!, width: 1),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Request content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      request.raeName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        request.raeDistrict,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  request.raeCode,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  request.lastMessage,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  timeStr,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Accept button
+          ElevatedButton(
+            onPressed: () => _acceptRequest(request),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF27AE60),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Accept',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Accept a pending advisory request
+  Future<void> _acceptRequest(ConversationItem request) async {
+    try {
+      // Update conversation: assign SME and change status to active
+      await _smeService.acceptAdvisoryRequest(
+        conversationId: request.id,
+        smeUid: _smeUid,
+      );
+
+      if (!mounted) return;
+
+      // Show success and navigate to chat
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Request accepted! Chat started.'),
+          backgroundColor: Color(0xFF27AE60),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Navigate to chat screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: request.id,
+            raeName: request.raeName,
+            raeCode: request.raeCode,
+            raeUid: request.raeUid,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // -----------------------------------------------------------------
