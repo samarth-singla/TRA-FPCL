@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../services/admin_service.dart';
 
 /// Order Approval Screen
@@ -888,21 +891,19 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
+                          child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        'PO for ${order.displayId} saved')),
-                              );
+                              _exportPO(order, items);
                             },
-                            icon: const Icon(Icons.download_outlined, size: 18),
-                            label: const Text('Save PO'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _blue,
-                              side: const BorderSide(color: _blue),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            icon: const Icon(Icons.picture_as_pdf_outlined,
+                                size: 18),
+                            label: const Text('Export as PDF'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _blue,
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
                             ),
@@ -916,6 +917,252 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ─── PDF Export ───────────────────────────────────────────────────────────
+
+  Future<void> _exportPO(
+      OrderSummary order, List<Map<String, dynamic>> items) async {
+    try {
+      final doc = pw.Document();
+      final double subtotal = items.fold(
+        0,
+        (sum, i) => sum + ((i['total_price'] as num?)?.toDouble() ?? 0),
+      );
+      final double gst = subtotal * 0.18;
+      final double grandTotal = subtotal + gst;
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context ctx) => [
+            // ── Logo / Title row ──────────────────────────────────────────
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'FPCL — Purchase Order',
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Farmer Producer Company Limited',
+                      style: const pw.TextStyle(
+                          fontSize: 10, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'PO-${order.displayId}',
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      'Date: ${_fmtDate(DateTime.now())}',
+                      style: const pw.TextStyle(
+                          fontSize: 10, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+            pw.Divider(color: PdfColors.blue800, thickness: 1.5),
+            pw.SizedBox(height: 12),
+            // ── Party Details ─────────────────────────────────────────────
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Bill To:',
+                          style:
+                              pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(order.raeName,
+                          style: const pw.TextStyle(fontSize: 11)),
+                      pw.Text(order.raeCode,
+                          style: const pw.TextStyle(
+                              fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('District: ${order.district}',
+                          style: const pw.TextStyle(
+                              fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                ),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Supply By:',
+                          style:
+                              pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(order.supplierName ?? 'Assigned Supplier',
+                          style: const pw.TextStyle(fontSize: 11)),
+                      if (order.approvedBy != null) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Approved By:',
+                            style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        pw.Text(order.approvedBy!,
+                            style: const pw.TextStyle(
+                                fontSize: 10, color: PdfColors.grey700)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+            // ── Line Items Table ──────────────────────────────────────────
+            pw.Text('Line Items',
+                style:
+                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(
+                  color: PdfColors.grey300, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(4),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(2),
+              },
+              children: [
+                // Header
+                pw.TableRow(
+                  decoration:
+                      const pw.BoxDecoration(color: PdfColors.blue50),
+                  children: [
+                    _pdfCell('Product', isHeader: true),
+                    _pdfCell('Qty', isHeader: true, align: pw.Alignment.centerRight),
+                    _pdfCell('Rate (₹)', isHeader: true, align: pw.Alignment.centerRight),
+                    _pdfCell('Amount (₹)', isHeader: true, align: pw.Alignment.centerRight),
+                  ],
+                ),
+                // Items
+                ...items.map((item) {
+                  final name = item['product_name']?.toString() ?? '';
+                  final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+                  final ppu = (item['price_per_unit'] as num?)?.toDouble() ?? 0;
+                  final total =
+                      (item['total_price'] as num?)?.toDouble() ?? 0;
+                  return pw.TableRow(children: [
+                    _pdfCell(name),
+                    _pdfCell('$qty', align: pw.Alignment.centerRight),
+                    _pdfCell(ppu.toStringAsFixed(2),
+                        align: pw.Alignment.centerRight),
+                    _pdfCell(total.toStringAsFixed(2),
+                        align: pw.Alignment.centerRight),
+                  ]);
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            // ── Totals ────────────────────────────────────────────────────
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Container(
+                width: 220,
+                child: pw.Column(
+                  children: [
+                    _totalsRow('Subtotal', subtotal),
+                    _totalsRow('GST (18%)', gst),
+                    pw.Divider(color: PdfColors.grey400),
+                    _totalsRow('Grand Total', grandTotal, isTotal: true),
+                  ],
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 30),
+            pw.Divider(color: PdfColors.grey400),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'This is a computer-generated Purchase Order. No signature required.',
+              style: const pw.TextStyle(
+                  fontSize: 9, color: PdfColors.grey600),
+            ),
+          ],
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'PO-${order.displayId}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('PDF export failed: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  pw.Widget _pdfCell(
+    String text, {
+    bool isHeader = false,
+    pw.Alignment align = pw.Alignment.centerLeft,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      alignment: align,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _totalsRow(String label, double amount,
+      {bool isTotal = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: isTotal ? 12 : 10,
+              fontWeight:
+                  isTotal ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: isTotal ? PdfColors.black : PdfColors.grey700,
+            ),
+          ),
+          pw.Text(
+            '₹${amount.toStringAsFixed(2)}',
+            style: pw.TextStyle(
+              fontSize: isTotal ? 12 : 10,
+              fontWeight:
+                  isTotal ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: isTotal ? PdfColors.green800 : PdfColors.grey700,
+            ),
+          ),
+        ],
       ),
     );
   }

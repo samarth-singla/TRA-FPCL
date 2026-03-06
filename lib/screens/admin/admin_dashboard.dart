@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
 import 'order_approval_screen.dart';
+import 'reports_screen.dart';
+import 'rae_management_screen.dart';
 import '../profile/profile_screen.dart';
 
 /// FPCL Admin Dashboard — Web Portal
@@ -248,7 +250,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 child: _actionTile(
                   icon: Icons.bar_chart,
                   label: 'Reports',
-                  onTap: () => _snack(context, 'Reports – Coming Soon'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ReportsScreen()),
+                  ),
                 ),
               ),
             ],
@@ -260,7 +266,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 child: _actionTile(
                   icon: Icons.people_outline,
                   label: 'RAE Management',
-                  onTap: () => _snack(context, 'RAE Management – Coming Soon'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const RaeManagementScreen()),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -687,7 +697,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               title: const Text('Reports'),
               onTap: () {
                 Navigator.pop(context);
-                _snack(context, 'Reports – Coming Soon');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ReportsScreen()),
+                );
               },
             ),
             ListTile(
@@ -695,7 +709,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               title: const Text('RAE Management'),
               onTap: () {
                 Navigator.pop(context);
-                _snack(context, 'RAE Management – Coming Soon');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const RaeManagementScreen()),
+                );
               },
             ),
             ListTile(

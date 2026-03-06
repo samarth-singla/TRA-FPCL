@@ -391,12 +391,15 @@ class _CatalogueManagementScreenState
                     Expanded(
                       child: Row(
                         children: [
-                          Text(
-                            product.name,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF111827),
+                          Flexible(
+                            child: Text(
+                              product.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF111827),
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
