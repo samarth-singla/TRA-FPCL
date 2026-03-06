@@ -125,6 +125,18 @@ This project uses shared Firebase and Supabase instances:
 
 All configuration files (including API keys) are committed to the repository for easy setup.
 
+### Using a Different Firebase Account
+
+If you want to connect this project to your own Firebase account:
+
+**Quick Steps:**
+1. Replace `android/app/google-services.json` with your Firebase config file
+2. Add your SHA-1 and SHA-256 keys to Firebase Console
+3. Enable Phone authentication in Firebase
+4. Add test phone number in Firebase Console
+
+📖 **See detailed instructions:** [FIREBASE_MIGRATION_GUIDE.md](FIREBASE_MIGRATION_GUIDE.md)
+
 ### Firebase Test Numbers (Development)
 
 For development without SMS costs, Firebase test numbers are configured:
@@ -181,6 +193,7 @@ For development without SMS costs, Firebase test numbers are configured:
 
 ## Additional Documentation
 
+- [FIREBASE_MIGRATION_GUIDE.md](FIREBASE_MIGRATION_GUIDE.md) - **How to connect to a different Firebase account**
 - [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) - Detailed setup guide
 - [SUPABASE_TABLES.sql](SUPABASE_TABLES.sql) - Database schema
 - [FIREBASE_TEST_NUMBERS_SETUP.md](FIREBASE_TEST_NUMBERS_SETUP.md) - Firebase test configuration

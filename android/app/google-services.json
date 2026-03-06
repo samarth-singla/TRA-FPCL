@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "668657645993",
-    "project_id": "tra-fpcl",
-    "storage_bucket": "tra-fpcl.firebasestorage.app"
+    "project_number": "1018015733879",
+    "project_id": "tra-fpcl-33738",
+    "storage_bucket": "tra-fpcl-33738.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:668657645993:android:481fb1de06bde14df9ecb8",
+        "mobilesdk_app_id": "1:1018015733879:android:d6145feb32c88ff2b34e72",
         "android_client_info": {
           "package_name": "com.example.tra_fpcl_app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBo2BSNojDZrL18I33te0y7Yxf1kwCYskI"
+          "current_key": "AIzaSyDVfjzrebexTY2iiLlh5KtMER38QulVqoA"
         }
       ],
       "services": {
