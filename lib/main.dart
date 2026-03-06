@@ -104,7 +104,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // Similar to React Router: user ? <Dashboard /> : <Login />
     return _currentUser != null 
         ? const DashboardRouter() 
-        : const LoginScreen();
+        : const PhoneLoginScreen();
   }
 }
 
@@ -165,10 +165,7 @@ class DashboardRouter extends StatelessWidget {
         // Route to role-specific dashboard
         switch (role) {
           case 'RAE':
-            return const DashboardShell(
-              title: 'RAE Dashboard',
-              child: RAEDashboard(),
-            );
+            return const RAEDashboard();
           case 'SME':
             // SMEDashboard has its own full-bleed Scaffold (purple header + FAB).
             // Return it directly — no DashboardShell wrapper needed.
@@ -229,10 +226,7 @@ class DashboardRouter extends StatelessWidget {
             // SupplierDashboard has its own full-bleed Scaffold (indigo header + FAB).
             return const SupplierDashboard();
           default:
-            return const DashboardShell(
-              title: 'Dashboard',
-              child: RAEDashboard(),
-            );
+            return const RAEDashboard();
         }
       },
     );
