@@ -23,12 +23,14 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
   final _service = AdminService();
   final _adminUser = firebase_auth.FirebaseAuth.instance.currentUser;
 
-  int _selectedTab = 0; // 0=Pending, 1=Approved
+  int _selectedTab = 0; // 0=Pending, 1=Approved, 2=Dispatched
 
   List<OrderSummary> _pending = [];
   List<OrderSummary> _approved = [];
+  List<OrderSummary> _dispatched = [];
   bool _loadingPending = true;
   bool _loadingApproved = true;
+  bool _loadingDispatched = true;
 
   String get _adminName =>
       _adminUser?.displayName ?? _adminUser?.phoneNumber ?? 'Admin User';
@@ -42,6 +44,7 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
   Future<void> _loadAll() async {
     _loadPending();
     _loadApproved();
+    _loadDispatched();
   }
 
   Future<void> _loadPending() async {
@@ -56,6 +59,12 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
     if (mounted) setState(() { _approved = orders; _loadingApproved = false; });
   }
 
+  Future<void> _loadDispatched() async {
+    setState(() => _loadingDispatched = true);
+    final orders = await _service.getAllOrders(status: 'dispatched');
+    if (mounted) setState(() { _dispatched = orders; _loadingDispatched = false; });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,9 +75,14 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
             _buildHeader(context),
             _buildTabBar(),
             Expanded(
-              child: _selectedTab == 0
-                  ? _buildPendingList()
-                  : _buildApprovedList(),
+              child: IndexedStack(
+                index: _selectedTab,
+                children: [
+                  _buildPendingList(),
+                  _buildApprovedList(),
+                  _buildDispatchedList(),
+                ],
+              ),
             ),
           ],
         ),
@@ -129,6 +143,7 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
           children: [
             _tab(0, 'Pending', _pending.length, _loadingPending),
             _tab(1, 'Approved', _approved.length, _loadingApproved),
+            _tab(2, 'Dispatched', _dispatched.length, _loadingDispatched),
           ],
         ),
       ),
@@ -313,6 +328,108 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
     );
   }
 
+  Widget _buildDispatchedList() {
+    if (_loadingDispatched) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_dispatched.isEmpty) {
+      return _emptyState('No dispatched orders', Icons.local_shipping_outlined);
+    }
+    return RefreshIndicator(
+      onRefresh: _loadDispatched,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _dispatched.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) =>
+            _buildDispatchedCard(_dispatched[index]),
+      ),
+    );
+  }
+
+  Widget _buildDispatchedCard(OrderSummary order) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    order.displayId,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  Text(
+                    order.raeName,
+                    style: const TextStyle(
+                        fontSize: 13, color: Color(0xFF374151)),
+                  ),
+                  Text(
+                    order.district,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF6B7280)),
+                  ),
+                  if (order.supplierName != null)
+                    Text(
+                      'Supplier: ${order.supplierName}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF6B7280)),
+                    ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: const Text(
+                    'In Transit',
+                    style: TextStyle(
+                        color: Color(0xFF1D4ED8),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '\u20b9${order.totalAmount.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: _green),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ─── Approved List ─────────────────────────────────────────────────────────
 
   Widget _buildApprovedList() {
@@ -426,12 +543,7 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
             child: SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () =>
-                    ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text(
-                          'Generating PO for ${order.displayId}...')),
-                ),
+                onPressed: () => _showGeneratePO(order),
                 icon: const Icon(Icons.description_outlined, size: 18),
                 label: const Text('Generate PO'),
                 style: OutlinedButton.styleFrom(
@@ -553,29 +665,257 @@ class _OrderApprovalScreenState extends State<OrderApprovalScreen> {
   }
 
   void _showOrderDetails(OrderSummary order) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(order.displayId),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _detailRow('RAE:', order.raeName),
-            _detailRow('Code:', order.raeCode),
-            _detailRow('District:', order.district),
-            _detailRow('Date:', _fmtDate(order.createdAt)),
-            _detailRow('Amount:', '₹${order.totalAmount.toStringAsFixed(0)}'),
-            _detailRow('Items:', '${order.itemCount}'),
-            _detailRow('Status:', order.status.toUpperCase()),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, sc) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(order.displayId,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              _detailRow('RAE:', order.raeName),
+              _detailRow('Code:', order.raeCode),
+              _detailRow('District:', order.district),
+              _detailRow('Date:', _fmtDate(order.createdAt)),
+              _detailRow('Total:', '₹${order.totalAmount.toStringAsFixed(0)}'),
+              _detailRow('Status:', order.status.toUpperCase()),
+              const SizedBox(height: 12),
+              const Text('Items',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              const Divider(),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _service.getOrderItems(order.id),
+                  builder: (ctx, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final items = snap.data!;
+                    if (items.isEmpty) {
+                      return const Text('No items found.',
+                          style: TextStyle(color: Colors.grey));
+                    }
+                    return ListView.separated(
+                      controller: sc,
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+                      itemBuilder: (ctx, i) {
+                        final item = items[i];
+                        final name = item['product_name']?.toString() ?? '';
+                        final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+                        final ppu = (item['price_per_unit'] as num?)?.toDouble() ?? 0;
+                        final total = (item['total_price'] as num?)?.toDouble() ?? 0;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 13)),
+                                    Text('₹${ppu.toStringAsFixed(0)} × $qty',
+                                        style: const TextStyle(
+                                            color: Color(0xFF6B7280),
+                                            fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              Text('₹${total.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14)),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  void _showGeneratePO(OrderSummary order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, sc) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.description_outlined,
+                      color: _blue, size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Purchase Order — ${order.displayId}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _detailRow('PO Number:', 'PO-${order.displayId}'),
+              _detailRow('Date:', _fmtDate(DateTime.now())),
+              _detailRow('RAE:', '${order.raeName} (${order.raeCode})'),
+              _detailRow('District:', order.district),
+              if (order.supplierName != null)
+                _detailRow('Supplier:', order.supplierName!),
+              if (order.approvedBy != null)
+                _detailRow('Approved by:', order.approvedBy!),
+              const SizedBox(height: 12),
+              const Text('Line Items',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              const Divider(),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _service.getOrderItems(order.id),
+                  builder: (ctx, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final items = snap.data!;
+                    double subtotal = 0;
+                    for (final i in items) {
+                      subtotal += (i['total_price'] as num?)?.toDouble() ?? 0;
+                    }
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            controller: sc,
+                            itemCount: items.length,
+                            itemBuilder: (ctx, i) {
+                              final item = items[i];
+                              final name = item['product_name']?.toString() ?? '';
+                              final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+                              final ppu = (item['price_per_unit'] as num?)?.toDouble() ?? 0;
+                              final total = (item['total_price'] as num?)?.toDouble() ?? 0;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(name,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: 13)),
+                                          Text('₹${ppu.toStringAsFixed(0)} × $qty',
+                                              style: const TextStyle(
+                                                  color: Color(0xFF6B7280),
+                                                  fontSize: 11)),
+                                        ],
+                                      ),
+                                    ),
+                                    Text('₹${total.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Total',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 15)),
+                            Text('₹${subtotal.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: _green)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(
+                                        'PO for ${order.displayId} saved')),
+                              );
+                            },
+                            icon: const Icon(Icons.download_outlined, size: 18),
+                            label: const Text('Save PO'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _blue,
+                              side: const BorderSide(color: _blue),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

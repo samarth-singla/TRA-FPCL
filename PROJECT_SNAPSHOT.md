@@ -1,5 +1,5 @@
 # TRA FPCL — Project Snapshot
-*Last updated: March 6, 2026 (v4 — Offline sync + Profile screen added). Hand this file to a new chat to continue work.*
+*Last updated: March 6, 2026 (v5 — Order flow completion). Hand this file to a new chat to continue work.*
 
 ---
 
@@ -251,6 +251,49 @@ Features:
 - `supplier_dashboard.dart`: removed `const` from `RichText` with non-const `TextSpan` children
 - `admin_service.dart`: removed `const` from `OrderSummary` constructors containing `DateTime`
 
+### ✅ v5: Order Flow Completion (latest session)
+
+#### Status flow standardised
+- Full status chain: `pending` → `confirmed` (admin approves) → `dispatched` (supplier ships) → `delivered` (supplier marks delivered)
+- Fixed `supplier_service.dart`: `dispatchOrders()` now sets `'dispatched'` (was incorrectly `'shipped'`)
+- `track_orders_screen.dart`: handles both `'dispatched'` and legacy `'shipped'` in filters and status helpers
+
+#### New: `lib/screens/rae/order_detail_screen.dart`
+- Full order detail screen for RAE — green header, 4-step animated progress stepper (Placed → Approved → Dispatched → Delivered)
+- Item list with quantities/prices, bill summary (subtotal/GST/total)
+- Admin approval card (approver name, date, assigned supplier)
+- Dispatch card (supplier, driver name, vehicle number)
+- Accepts `orderId` (real UUID) + `displayId` + optional `isDemo` flag
+
+#### Modified: `lib/screens/rae/track_orders_screen.dart`
+- "View Details" button now navigates to `OrderDetailScreen` (was a "coming soon" snackbar)
+- Status filters and helpers handle both `'dispatched'` and `'shipped'`
+
+#### Modified: `lib/screens/catalog/shopping_cart_screen.dart`
+- After order placed → shows success bottom sheet with short order ID, "Track My Order" → `TrackOrdersScreen`, "Continue Shopping" → pop
+- No longer just pops back with a snackbar
+
+#### Modified: `lib/services/admin_service.dart`
+- `OrderSummary` has `supplierUid` + `supplierName` fields parsed from notes JSON
+- `approveOrder()` accepts optional `supplierUid`/`supplierName`, stores in notes JSON and `supplier_uid` column
+- New: `getSuppliers()`, `getOrderItems(orderId)`, `markDelivered(orderId)`, `notifyRAE(...)`
+- `_enrichOrders()` parses supplier info from notes JSON
+
+#### Modified: `lib/screens/admin/order_approval_screen.dart`
+- 3rd tab "Dispatched" added (shows `status = 'dispatched'` orders)
+- Approve flow shows supplier picker (radio list) before confirming
+- "View Details" → `DraggableScrollableSheet` with real item list from DB
+- "Generate PO" → PO bottom sheet with line items, totals, supplier/approver info
+
+#### Modified: `lib/services/supplier_service.dart`
+- `RaeOrderEntry` now has `orderUuid` (real DB UUID) alongside display `orderId`
+- Added `markDelivered(orderId)` method
+- Fixed `dispatchOrders()` status: `'shipped'` → `'dispatched'`
+
+#### Modified: `lib/screens/dashboard/supplier_dashboard.dart`
+- "Mark as Delivered" button on dispatched bulk POs
+- All dispatch/invoice/delivery calls now use `raeOrder.orderUuid` (real UUID)
+
 ---
 
 ## 6. What Is Left (TODO)
@@ -267,11 +310,6 @@ Features:
 - RAEs should be able to register farmers they serve
 - New table needed: `farmers` (id, rae_uid, name, village, phone, crop_type, land_area)
 
-#### Order Flow Completion
-- RAE can add to cart and place order (basic flow exists)
-- Missing: Order status updates visible to RAE after Admin approves
-- Missing: Supplier assignment and fulfilment confirmation back to RAE
-
 #### Advisory / Content
 - SME should be able to send advisories/alerts to RAEs in their district
 - New table needed: `advisories` (id, sme_uid, district, title, content, created_at)
@@ -282,6 +320,8 @@ Features:
 
 ### 🟢 Low Priority / Polish
 - **Push notifications** — Firebase Cloud Messaging not integrated
+- **Cancelled order view** — RAE's "Completed" tab shows `cancelled` orders mixed in; a dedicated Cancelled tab would improve UX
+- **PO PDF export** — "Save PO" button in admin order approval shows a snackbar; could wire to a real PDF library (e.g., `pdf` package)
 - **SME Dashboard chat** — conversations are view-only; full chat not built
 
 ---

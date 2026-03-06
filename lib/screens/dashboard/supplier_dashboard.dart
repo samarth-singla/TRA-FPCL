@@ -515,6 +515,13 @@ class _SupplierDashboardState extends State<SupplierDashboard> {
                       color: _greenAccent,
                       onTap: () => _showDispatchDialog(context, po),
                     ),
+                  if (po.status == 'dispatched')
+                    _actionButton(
+                      icon: Icons.check_circle_outline,
+                      label: 'Mark as Delivered',
+                      color: _greenAccent,
+                      onTap: () => _handleMarkDelivered(po),
+                    ),
                   const SizedBox(height: 8),
                   _actionButton(
                     icon: Icons.description_outlined,
@@ -833,13 +840,60 @@ class _SupplierDashboardState extends State<SupplierDashboard> {
   // ─────────────────────────────────────────────────────────────────────────
 
   void _handleGenerateInvoices(BulkPurchaseOrder po) async {
-    final orderIds = po.raeOrders.map((e) => e.orderId).toList();
+    final orderIds = po.raeOrders.map((e) => e.orderUuid).toList();
     try {
       await _service.generateInvoices(orderIds);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Invoices generated for ${po.raeOrders.length} RAEs'),
+            backgroundColor: _greenAccent,
+          ),
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _handleMarkDelivered(BulkPurchaseOrder po) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Mark as Delivered'),
+        content: Text(
+            'Confirm delivery of ${po.bulkPoId} to ${po.district}?\n'
+            '${po.raeOrders.length} RAE order(s) will be marked as delivered.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _greenAccent, foregroundColor: Colors.white),
+            child: const Text('Confirm Delivery'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      for (final raeOrder in po.raeOrders) {
+        await _service.markDelivered(raeOrder.orderUuid);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '${po.bulkPoId} marked as delivered!'),
             backgroundColor: _greenAccent,
           ),
         );
@@ -1012,7 +1066,7 @@ class _SupplierDashboardState extends State<SupplierDashboard> {
                               try {
                                 await _service.dispatchOrders(
                                   orderIds: po.raeOrders
-                                      .map((e) => e.orderId)
+                                      .map((e) => e.orderUuid)
                                       .toList(),
                                   driverName: driverNameCtrl.text.trim(),
                                   driverPhone: driverPhoneCtrl.text.trim(),

@@ -28,10 +28,12 @@ class OrderSummary {
   final String district;
   final double totalAmount;
   final int itemCount;
-  final String status;       // pending | confirmed | processing | shipped | delivered | cancelled
+  final String status;       // pending | confirmed | dispatched | delivered | cancelled
   final DateTime createdAt;
   final String? approvedBy;
   final DateTime? approvedAt;
+  final String? supplierUid;
+  final String? supplierName;
 
   const OrderSummary({
     required this.id,
@@ -46,6 +48,8 @@ class OrderSummary {
     required this.createdAt,
     this.approvedBy,
     this.approvedAt,
+    this.supplierUid,
+    this.supplierName,
   });
 }
 
@@ -225,16 +229,25 @@ class AdminService {
       final profile = profiles[raeUid];
       final notes = o['notes']?.toString() ?? '';
 
-      // Parse approvedBy from notes JSON if present
+      // Parse notes JSON fields
       String? approvedBy;
       DateTime? approvedAt;
-      if (notes.contains('"approved_by"')) {
-        final match = RegExp(r'"approved_by":"([^"]+)"').firstMatch(notes);
-        approvedBy = match?.group(1);
-        final dateMatch =
-            RegExp(r'"approved_at":"([^"]+)"').firstMatch(notes);
-        if (dateMatch != null) {
-          approvedAt = DateTime.tryParse(dateMatch.group(1)!);
+      String? supplierUid;
+      String? supplierName;
+      if (notes.isNotEmpty) {
+        if (notes.contains('"approved_by"')) {
+          final match = RegExp(r'"approved_by":"([^"]+)"').firstMatch(notes);
+          approvedBy = match?.group(1);
+          final dateMatch = RegExp(r'"approved_at":"([^"]+)"').firstMatch(notes);
+          if (dateMatch != null) {
+            approvedAt = DateTime.tryParse(dateMatch.group(1)!);
+          }
+        }
+        if (notes.contains('"supplier_uid"')) {
+          final match = RegExp(r'"supplier_uid":"([^"]*)"').firstMatch(notes);
+          supplierUid = match?.group(1)?.isNotEmpty == true ? match?.group(1) : null;
+          final nameMatch = RegExp(r'"supplier_name":"([^"]*)"').firstMatch(notes);
+          supplierName = nameMatch?.group(1)?.isNotEmpty == true ? nameMatch?.group(1) : null;
         }
       }
 
@@ -252,6 +265,8 @@ class AdminService {
             DateTime.now(),
         approvedBy: approvedBy,
         approvedAt: approvedAt,
+        supplierUid: supplierUid,
+        supplierName: supplierName,
       );
     }).toList();
   }
@@ -300,16 +315,71 @@ class AdminService {
     }
   }
 
+  // ─── Suppliers ────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, String>>> getSuppliers() async {
+    try {
+      final rows = await _supabase
+          .from('profiles')
+          .select('uid, name, district')
+          .eq('role', 'SUPPLIER')
+          .order('name', ascending: true);
+      return (rows as List)
+          .map((r) => {
+                'uid': r['uid']?.toString() ?? '',
+                'name': r['name']?.toString() ?? 'Unknown Supplier',
+                'district': r['district']?.toString() ?? '',
+              })
+          .toList();
+    } catch (e) {
+      debugPrint('⚠️ AdminService.getSuppliers error: $e');
+      return [
+        {'uid': 'demo-sup-1', 'name': 'AgriTech Suppliers Ltd.', 'district': 'Hyderabad'},
+        {'uid': 'demo-sup-2', 'name': 'GreenField Agro Co.', 'district': 'Warangal'},
+        {'uid': 'demo-sup-3', 'name': 'Krishi Input Hub', 'district': 'Khammam'},
+      ];
+    }
+  }
+
+  // ─── Order Items ──────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getOrderItems(String orderId) async {
+    try {
+      final rows = await _supabase
+          .from('order_items')
+          .select('product_name, quantity, price_per_unit, total_price')
+          .eq('order_id', orderId);
+      return (rows as List)
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList();
+    } catch (e) {
+      debugPrint('⚠️ AdminService.getOrderItems error: $e');
+      return [
+        {'product_name': 'DAP Fertilizer', 'quantity': 2, 'price_per_unit': 1200.0, 'total_price': 2400.0},
+        {'product_name': 'Urea', 'quantity': 3, 'price_per_unit': 800.0, 'total_price': 2400.0},
+      ];
+    }
+  }
+
   // ─── Approve / Reject ─────────────────────────────────────────────────────
 
-  Future<void> approveOrder(String orderId, String adminName) async {
+  Future<void> approveOrder(
+    String orderId,
+    String adminName, {
+    String? supplierUid,
+    String? supplierName,
+  }) async {
     final notesJson =
-        '{"approved_by":"$adminName","approved_at":"${DateTime.now().toIso8601String()}"}';
-    await _supabase.from('orders').update({
+        '{"approved_by":"$adminName","approved_at":"${DateTime.now().toIso8601String()}","supplier_uid":"${supplierUid ?? ''}","supplier_name":"${supplierName ?? ''}"}';
+    final update = <String, dynamic>{
       'status': 'confirmed',
       'notes': notesJson,
       'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', orderId);
+    };
+    if (supplierUid != null && supplierUid.isNotEmpty) {
+      update['supplier_uid'] = supplierUid;
+    }
+    await _supabase.from('orders').update(update).eq('id', orderId);
   }
 
   Future<void> rejectOrder(String orderId, String reason) async {
@@ -320,6 +390,31 @@ class AdminService {
       'notes': notesJson,
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', orderId);
+  }
+
+  Future<void> markDelivered(String orderId) async {
+    await _supabase.from('orders').update({
+      'status': 'delivered',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', orderId);
+  }
+
+  Future<void> notifyRAE({
+    required String raeUid,
+    required String title,
+    required String message,
+  }) async {
+    try {
+      await _supabase.from('notifications').insert({
+        'uid': raeUid,
+        'title': title,
+        'message': message,
+        'is_read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('⚠️ AdminService.notifyRAE error: $e');
+    }
   }
 
   // ─── Demo / Fallback data ─────────────────────────────────────────────────

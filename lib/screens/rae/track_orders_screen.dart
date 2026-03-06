@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'order_detail_screen.dart';
 
 class TrackOrdersScreen extends StatefulWidget {
   const TrackOrdersScreen({super.key});
@@ -84,7 +85,8 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
                   .where((o) =>
                       o['status'] == 'pending' ||
                       o['status'] == 'confirmed' ||
-                      o['status'] == 'dispatched')
+                      o['status'] == 'dispatched' ||
+                      o['status'] == 'shipped')
                   .length;
               return Text(
                 '$active active',
@@ -110,7 +112,8 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
             .where((o) =>
                 o['status'] == 'pending' ||
                 o['status'] == 'confirmed' ||
-                o['status'] == 'dispatched')
+                o['status'] == 'dispatched' ||
+                o['status'] == 'shipped')
             .length;
         final completed =
             mine.where((o) => o['status'] == 'delivered').length;
@@ -161,7 +164,8 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
                 .where((o) =>
                     o['status'] == 'pending' ||
                     o['status'] == 'confirmed' ||
-                    o['status'] == 'dispatched')
+                    o['status'] == 'dispatched' ||
+                    o['status'] == 'shipped')
                 .toList()
             : mine.where((o) => o['status'] == 'delivered').toList();
 
@@ -362,9 +366,21 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
             width: double.infinity,
             child: OutlinedButton(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Order details – coming soon')));
+                final rawId = order['id']?.toString() ?? '';
+                final isDemo = demo || rawId.isEmpty || rawId.startsWith('ORD');
+                final displayId = demo
+                    ? orderId
+                    : '#${rawId.substring(0, 8).toUpperCase()}';
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrderDetailScreen(
+                      orderId: isDemo ? '' : rawId,
+                      displayId: displayId,
+                      isDemo: isDemo,
+                    ),
+                  ),
+                );
               },
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -387,6 +403,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
   Color _statusBgColor(String status) {
     switch (status) {
       case 'dispatched':
+      case 'shipped':
         return const Color(0xFF1565C0);
       case 'confirmed':
         return const Color(0xFFF57C00);
@@ -402,6 +419,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
   String _statusLabel(String status) {
     switch (status) {
       case 'dispatched':
+      case 'shipped':
         return 'Dispatched';
       case 'confirmed':
         return 'Approved';
@@ -421,6 +439,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
       case 'confirmed':
         return 0.50;
       case 'dispatched':
+      case 'shipped':
         return 0.75;
       case 'delivered':
         return 1.0;

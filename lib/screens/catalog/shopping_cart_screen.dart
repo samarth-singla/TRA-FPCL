@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/cart_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import '../rae/track_orders_screen.dart';
 
 class ShoppingCartScreen extends StatefulWidget {
   const ShoppingCartScreen({super.key});
@@ -294,6 +295,102 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
     );
   }
 
+  void _showOrderSuccess(String orderId) {
+    final shortId = orderId.length >= 8
+        ? '#${orderId.substring(0, 8).toUpperCase()}'
+        : '#$orderId';
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: const BoxDecoration(
+                color: Color(0xFFDCFCE7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check, color: _green, size: 38),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Order Placed!',
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF111827)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              shortId,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: _green,
+                  letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Your order is pending admin approval.\nYou will be notified once it is approved.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx); // close bottom sheet
+                  Navigator.pop(context); // go back to catalog
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const TrackOrdersScreen()),
+                  );
+                },
+                icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                label: const Text('Track My Order'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);   // close bottom sheet
+                  Navigator.pop(context); // go back to catalog
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: const BorderSide(color: _green),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Continue Shopping',
+                    style: TextStyle(color: _green)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _summaryRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -355,17 +452,7 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
       setState(() => _isSubmitting = false);
 
       if (mounted) {
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Order placed successfully!'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-        // Navigate back to product catalog
-        Navigator.pop(context);
+        _showOrderSuccess(orderId.toString());
       }
     } catch (e) {
       setState(() => _isSubmitting = false);

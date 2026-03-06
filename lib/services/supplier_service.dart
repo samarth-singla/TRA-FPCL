@@ -8,7 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A single RAE's order line inside a Bulk PO
 class RaeOrderEntry {
-  final String orderId;       // e.g. ORD1235
+  final String orderId;       // display id e.g. ORD1235
+  final String orderUuid;     // real DB UUID for Supabase operations
   final String raeUid;
   final String raeName;
   final String raeCode;       // e.g. RAE-HYD-001
@@ -20,6 +21,7 @@ class RaeOrderEntry {
 
   const RaeOrderEntry({
     required this.orderId,
+    required this.orderUuid,
     required this.raeUid,
     required this.raeName,
     required this.raeCode,
@@ -184,7 +186,7 @@ class SupplierService {
 
       // Unique districts → approx bulk POs
       final inTransit = orders
-          .where((o) => o['status'] == 'shipped')
+          .where((o) => o['status'] == 'dispatched' || o['status'] == 'shipped')
           .length;
       final pendingInvoices = orders
           .where((o) => o['status'] == 'confirmed' || o['status'] == 'processing')
@@ -289,6 +291,7 @@ class SupplierService {
           return RaeOrderEntry(
             orderId:
                 'ORD${oid.substring(0, 6).toUpperCase().replaceAll('-', '')}',
+            orderUuid: oid,
             raeUid: raeUid,
             raeName: profile?['name']?.toString() ?? 'RAE Agent',
             raeCode: 'RAE-${district.substring(0, 3).toUpperCase()}-${(orders.indexOf(o) + 1).toString().padLeft(3, '0')}',
@@ -306,7 +309,7 @@ class SupplierService {
         // Determine status from the most recent order's status in group
         final statuses = orders.map((o) => o['status']?.toString() ?? '').toList();
         final String bulkStatus;
-        if (statuses.every((s) => s == 'shipped' || s == 'delivered')) {
+        if (statuses.every((s) => s == 'dispatched' || s == 'shipped' || s == 'delivered')) {
           bulkStatus = 'dispatched';
         } else if (statuses.any((s) => s == 'confirmed' || s == 'processing')) {
           bulkStatus = 'ready_to_dispatch';
@@ -364,7 +367,7 @@ class SupplierService {
       final delivered =
           allOrders.where((o) => o['status'] == 'delivered').length;
       final shipped =
-          allOrders.where((o) => o['status'] == 'shipped').length;
+          allOrders.where((o) => o['status'] == 'dispatched' || o['status'] == 'shipped').length;
       final total = allOrders.length;
       final onTimeRate =
           total > 0 ? ((delivered + shipped) / total * 100) : 96.0;
@@ -391,7 +394,7 @@ class SupplierService {
 
   // ─── Dispatch ─────────────────────────────────────────────────────────────
 
-  /// Update all orders in a Bulk PO to 'shipped' and store driver info in notes.
+  /// Update all orders in a Bulk PO to 'dispatched' and store driver info in notes.
   Future<void> dispatchOrders({
     required List<String> orderIds,
     required String driverName,
@@ -402,11 +405,19 @@ class SupplierService {
         '{"invoice":true,"driver":"$driverName","phone":"$driverPhone","vehicle":"$vehicleNumber"}';
     for (final oid in orderIds) {
       await _supabase.from('orders').update({
-        'status': 'shipped',
+        'status': 'dispatched',
         'notes': notesJson,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', oid);
     }
+  }
+
+  /// Mark an order as delivered.
+  Future<void> markDelivered(String orderId) async {
+    await _supabase.from('orders').update({
+      'status': 'delivered',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', orderId);
   }
 
   /// Mark all orders in bulk PO as invoice generated
@@ -518,6 +529,7 @@ class SupplierService {
         raeOrders: [
           const RaeOrderEntry(
             orderId: 'ORD1235',
+            orderUuid: 'demo-order-1235',
             raeUid: 'demo1',
             raeName: 'Ramesh Kumar',
             raeCode: 'RAE-HYD-001',
@@ -532,6 +544,7 @@ class SupplierService {
           ),
           const RaeOrderEntry(
             orderId: 'ORD1236',
+            orderUuid: 'demo-order-1236',
             raeUid: 'demo2',
             raeName: 'Lakshmi Devi',
             raeCode: 'RAE-HYD-002',
@@ -557,6 +570,7 @@ class SupplierService {
         raeOrders: [
           const RaeOrderEntry(
             orderId: 'ORD1240',
+            orderUuid: 'demo-order-1240',
             raeUid: 'demo3',
             raeName: 'Prasad Rao',
             raeCode: 'RAE-WGL-001',
@@ -570,6 +584,7 @@ class SupplierService {
           ),
           const RaeOrderEntry(
             orderId: 'ORD1241',
+            orderUuid: 'demo-order-1241',
             raeUid: 'demo4',
             raeName: 'Anitha Devi',
             raeCode: 'RAE-WGL-002',
