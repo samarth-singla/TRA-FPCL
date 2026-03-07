@@ -110,8 +110,12 @@ lib/
 
 - `firebase_core: ^3.8.1` - Firebase initialization
 - `firebase_auth: ^5.3.4` - Phone authentication
+- `firebase_messaging: ^15.1.5` - Push notifications (FCM)
+- `flutter_local_notifications: ^18.0.1` - Local notification display
+- `cloud_functions: ^5.1.5` - Firebase Cloud Functions integration
 - `supabase_flutter: ^2.9.2` - Backend database & realtime
 - `provider: ^6.1.1` - State management
+- `http: ^1.2.2` - HTTP requests
 
 ## Environment Configuration
 
@@ -144,6 +148,54 @@ For development without SMS costs, Firebase test numbers are configured:
 - `+919999999999` → OTP: `123456`
 
 **Note:** For production deployment, test numbers should be removed and real SMS authentication enabled.
+
+## Push Notifications (FCM)
+
+### Firebase Cloud Messaging Setup
+
+This app includes Firebase Cloud Messaging for real-time push notifications:
+
+- 💬 **Chat Messages** - Receive notifications when someone sends you a message
+- 📋 **Advisory Requests** - SMEs notified when RAE creates request in their district
+- ✅ **Advisory Accepted** - RAE notified when SME accepts their request
+- 📦 **Order Dispatched** - RAE notified when admin dispatches their order
+
+### Current Status
+
+**✅ Already Completed:**
+- Firebase Cloud Messaging integrated in Flutter app
+- Notification services implemented (`notification_service.dart`, `fcm_sender_service.dart`)
+- Firebase Cloud Functions code written and validated (`functions/src/index.ts`)
+- Android permissions configured
+- Database migration file ready (`SUPABASE_MIGRATION_FCM.sql`)
+
+**⚠️ Requires Firebase Blaze Plan:**
+- FCM deployment is **ready but blocked** by Firebase billing requirements
+- Cloud Functions require **Blaze (pay-as-you-go) plan** to deploy
+- **Free tier is generous:** 2M function invocations/month, unlikely to exceed for this app
+
+### FCM Deployment
+
+**📋 See:** [FCM_DEPLOYMENT_GUIDE.md](FCM_DEPLOYMENT_GUIDE.md) for complete deployment steps after upgrading to Firebase Blaze plan.
+
+**Quick Summary:**
+1. Upgrade Firebase project to Blaze plan
+2. Deploy Cloud Functions: `cd functions && firebase deploy --only functions`
+3. Enable Firebase Cloud Messaging API in Google Cloud Console
+4. Run database migration: `SUPABASE_MIGRATION_FCM.sql`
+5. Test notifications on physical device
+
+### Until FCM is Deployed
+
+**All other app features work normally:**
+- ✅ Authentication (Phone OTP)
+- ✅ Product catalog
+- ✅ Shopping cart & orders
+- ✅ Advisory requests
+- ✅ Chat messaging
+- ✅ Dashboards & role-based access
+
+**Only push notifications are pending** deployment after Blaze upgrade.
 
 ## Features by Role
 
@@ -193,9 +245,14 @@ For development without SMS costs, Firebase test numbers are configured:
 
 ## Additional Documentation
 
-- [FIREBASE_MIGRATION_GUIDE.md](FIREBASE_MIGRATION_GUIDE.md) - **How to connect to a different Firebase account**
+- **[FCM_DEPLOYMENT_GUIDE.md](FCM_DEPLOYMENT_GUIDE.md)** - 🔔 **Deploy FCM after Firebase Blaze upgrade**
+- [FCM_INTEGRATION_GUIDE.md](FCM_INTEGRATION_GUIDE.md) - Detailed FCM technical documentation
+- [FCM_QUICK_REFERENCE.md](FCM_QUICK_REFERENCE.md) - Quick FCM code snippets
+- [FCM_CHECKLIST.md](FCM_CHECKLIST.md) - FCM implementation checklist
+- [FIREBASE_MIGRATION_GUIDE.md](FIREBASE_MIGRATION_GUIDE.md) - How to connect to a different Firebase account
 - [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) - Detailed setup guide
 - [SUPABASE_TABLES.sql](SUPABASE_TABLES.sql) - Database schema
+- [SUPABASE_MIGRATION_FCM.sql](SUPABASE_MIGRATION_FCM.sql) - FCM database migration
 - [FIREBASE_TEST_NUMBERS_SETUP.md](FIREBASE_TEST_NUMBERS_SETUP.md) - Firebase test configuration
 - [RAE_DASHBOARD_README.md](RAE_DASHBOARD_README.md) - RAE Dashboard documentation
 

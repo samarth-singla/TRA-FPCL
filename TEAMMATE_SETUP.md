@@ -12,6 +12,7 @@
 | **FPCL Admin Web Portal** | Separate Flutter web app (`lib/admin_main.dart`) — order approval, district stats, admin login |
 | **Mobile app** | ADMIN role removed from login; if an admin logs in on mobile they see a "use web portal" screen |
 | **Auth** | `dart:io` import fix in `auth_service.dart`; Firebase web options via `firebase_options.dart` |
+| **🔔 Push Notifications (FCM)** | Firebase Cloud Messaging integration — chat, advisory, order notifications (ready, pending Blaze deployment) |
 
 ---
 
@@ -37,13 +38,92 @@ git stash pop   # re-apply your changes if needed
 flutter pub get
 ```
 
+This installs all required packages including:
+- `firebase_messaging` - Push notifications
+- `flutter_local_notifications` - Local notification display
+- `cloud_functions` - Firebase Cloud Functions integration
+- `http` - HTTP requests
+- All existing packages (firebase_auth, supabase_flutter, etc.)
+
 ---
 
-## Step 3 — Firebase Web Setup (required for the Admin Web Portal only)
+## Step 3 — Firebase Functions Setup (Optional for Testing)
+
+> **Note:** This step is **optional** for teammates. Firebase Cloud Functions are already written but not yet deployed (awaiting Firebase Blaze plan upgrade). The app works fully without this step.
+
+If you want to test or modify the Firebase Cloud Functions locally:
+
+### 3a. Install Node.js (if not already installed)
+
+Download and install from: https://nodejs.org/ (LTS version recommended)
+
+Verify installation:
+```bash
+node --version  # Should show v18 or higher
+npm --version
+```
+
+### 3b. Install Firebase Functions Dependencies
+
+```bash
+cd functions
+npm install
+cd ..
+```
+
+### 3c. Validate Functions Code (Optional)
+
+```bash
+cd functions
+npm run lint      # Check for code issues
+npm run build     # Compile TypeScript
+cd ..
+```
+
+**What these functions do:**
+- `sendChatNotification` - Sends notification when user receives chat message
+- `sendAdvisoryNotification` - Notifies all district SMEs when RAE creates request
+- `sendAdvisoryAcceptedNotification` - Notifies RAE when SME accepts
+- `sendOrderNotification` - Notifies RAE when order dispatched
+
+**Deployment Status:**
+- ✅ Code written and validated
+- ⏳ Deployment pending Firebase Blaze plan upgrade (requires credit card)
+- 📋 See: [FCM_DEPLOYMENT_GUIDE.md](FCM_DEPLOYMENT_GUIDE.md) for deployment steps
+
+---
+
+## Step 4 — What Works Now vs What's Pending
+
+### ✅ Working Now (No Action Needed)
+
+All core features work perfectly:
+- Phone authentication (OTP login)
+- All user roles (RAE, SME, Admin, Supplier)
+- Product catalog & shopping cart
+- Order management
+- Advisory request system
+- Chat messaging (send/receive messages)
+- All dashboards
+- Database operations
+
+### ⏳ Pending Deployment (After Blaze Upgrade)
+
+Only push notifications are pending:
+- Chat message notifications
+- Advisory request notifications
+- Advisory accepted notifications
+- Order dispatch notifications
+
+**The app fully functions** - users just won't receive push notifications until Firebase Cloud Functions are deployed (1-2 days).
+
+---
+
+## Step 5 — Firebase Web Setup (required for the Admin Web Portal only)
 
 The mobile app works without this step. Only do this if you want to run the Admin Web Portal in Chrome.
 
-### 3a. Install the FlutterFire CLI
+### 5a. Install the FlutterFire CLI
 
 ```bash
 dart pub global activate flutterfire_cli
@@ -59,7 +139,7 @@ On Windows (PowerShell):
 $env:PATH += ";$env:USERPROFILE\.pub-cache\bin"
 ```
 
-### 3b. Generate `firebase_options.dart`
+### 5b. Generate `firebase_options.dart`
 
 ```bash
 flutterfire configure --project=tra-fpcl-33738 --platforms=android,web
@@ -74,7 +154,7 @@ This generates `lib/firebase_options.dart` which is required for the web portal 
 
 ---
 
-## Step 4 — Running the Apps
+## Step 6 — Running the Apps
 
 ### Mobile App (Android)
 
@@ -117,7 +197,7 @@ Then register that number as a Firebase test number:
 
 ---
 
-## Step 5 — Project Structure Overview
+## Step 7 — Project Structure Overview
 
 ```
 lib/
@@ -130,7 +210,10 @@ lib/
 │   ├── cart_service.dart              ← Cart state (Provider)
 │   ├── sme_service.dart               ← SME data layer
 │   ├── supplier_service.dart          ← Supplier data layer (NEW)
-│   └── admin_service.dart             ← Admin data layer (NEW)
+│   ├── admin_service.dart             ← Admin data layer (NEW)
+│   ├── notification_service.dart      ← FCM receiver - handles incoming notifications (NEW)
+│   ├── fcm_sender_service.dart        ← FCM sender - sends notifications via Cloud Functions (NEW)
+│   └── fcm_sender_service_supabase.dart ← Alternative FCM sender using Supabase Edge Functions (NEW)
 │
 └── screens/
     ├── auth/
@@ -148,11 +231,26 @@ lib/
     └── admin/
         ├── admin_dashboard.dart       ← Blue theme, web-optimised (NEW)
         └── order_approval_screen.dart ← Pending/Approved tabs (NEW)
+
+functions/                                 ← Firebase Cloud Functions (NEW)
+├── src/
+│   └── index.ts                          ← FCM notification handlers (4 functions)
+├── package.json                           ← Node.js dependencies
+└── tsconfig.json                          ← TypeScript config
+```
+
+### FCM Documentation
+
+- **[FCM_DEPLOYMENT_GUIDE.md](FCM_DEPLOYMENT_GUIDE.md)** - Step-by-step deployment after Blaze upgrade
+- **[FCM_INTEGRATION_GUIDE.md](FCM_INTEGRATION_GUIDE.md)** - Technical documentation
+- **[FCM_QUICK_REFERENCE.md](FCM_QUICK_REFERENCE.md)** - Code snippets
+- **[FCM_CHECKLIST.md](FCM_CHECKLIST.md)** - Implementation checklist
+- **[SUPABASE_MIGRATION_FCM.sql](SUPABASE_MIGRATION_FCM.sql)** - Database migration for FCM tokens
 ```
 
 ---
 
-## Step 6 — Supabase (Database)
+## Step 8 — Supabase (Database)
 
 No action needed — the Supabase project is already live and shared:
 
@@ -172,12 +270,13 @@ cat SUPABASE_TABLES.sql
 
 | Error | Fix |
 |---|---|
-| `firebase_options.dart not found` | Run Step 3b |
-| `flutterfire: command not found` | Run Step 3a (add to PATH) |
+| `firebase_options.dart not found` | Run Step 5b |
+| `flutterfire: command not found` | Run Step 5a (add to PATH) |
 | Blank white screen in Chrome | Firebase not initialised — `firebase_options.dart` missing |
 | `SocketException isn't a type` | Already fixed in `auth_service.dart` — make sure you pulled latest |
 | `Could not load your profile` on mobile | Sign out and sign back in — profile will be auto-created |
 | `No devices found` for Chrome | Run `flutter config --enable-web` once |
+| Push notifications not working | Normal - FCM deployment pending Blaze upgrade (see Step 4) |
 
 ---
 

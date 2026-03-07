@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_service.dart';
 import 'services/cart_service.dart';
 import 'services/offline_sync_service.dart';
+import 'services/notification_service.dart';
 import 'screens/auth/phone_login_screen.dart';
 import 'screens/dashboard/rae_dashboard.dart';
 import 'screens/dashboard/sme_dashboard.dart';
 import 'screens/dashboard/supplier_dashboard.dart';
+
+/// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print('📨 Background message: ${message.notification?.title}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +35,10 @@ void main() async {
 
   // Initialize offline SQLite cache (mobile only — no-op on web)
   await OfflineSyncService().init();
+
+  // Initialize FCM
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await NotificationService().initialize();
 
   runApp(const MyApp());
 }
