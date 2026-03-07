@@ -394,8 +394,8 @@ class _RAEDashboardState extends State<RAEDashboard> {
 
   Widget _buildMyFarmersSection() {
     final uid = _fbUser?.uid ?? '';
-    return FutureBuilder<List<Farmer>>(
-      future: FarmerService().getFarmers(uid),
+    return StreamBuilder<List<Farmer>>(
+      stream: FarmerService().farmersStream(uid),
       builder: (context, snapshot) {
         final farmers = snapshot.data ?? [];
         return Column(
