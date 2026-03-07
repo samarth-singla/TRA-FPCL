@@ -239,3 +239,43 @@ ON CONFLICT DO NOTHING;
 -- VALUES 
 --   ('your-user-uid-here', 'Organic Fertilizer', 50, 'kg', 'active'),
 --   ('your-user-uid-here', 'Seeds - Wheat', 10, 'kg', 'processing');
+
+-- ============================================================
+-- Farmer Registration Tables (RAE flow)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS farmers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rae_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  village TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  crop_type TEXT NOT NULL DEFAULT '',
+  land_area DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_farmers_rae_uid ON farmers(rae_uid);
+CREATE INDEX IF NOT EXISTS idx_farmers_village ON farmers(village);
+ALTER TABLE farmers DISABLE ROW LEVEL SECURITY;
+ALTER PUBLICATION supabase_realtime ADD TABLE farmers;
+
+-- ============================================================
+-- Advisories / Alerts Tables (SME flow)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS advisories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sme_uid TEXT NOT NULL REFERENCES profiles(uid) ON DELETE CASCADE,
+  district TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_advisories_sme_uid ON advisories(sme_uid);
+CREATE INDEX IF NOT EXISTS idx_advisories_district ON advisories(district);
+CREATE INDEX IF NOT EXISTS idx_advisories_created_at ON advisories(created_at DESC);
+ALTER TABLE advisories DISABLE ROW LEVEL SECURITY;
+ALTER PUBLICATION supabase_realtime ADD TABLE advisories;

@@ -6,9 +6,13 @@ import '../catalog/shopping_cart_screen.dart';
 import '../rae/track_orders_screen.dart';
 import '../rae/earnings_screen.dart';
 import '../rae/request_advisory_screen.dart';
+import '../rae/farmer_list_screen.dart';
+import '../rae/rae_advisories_screen.dart';
 import '../chat/chat_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/farmer_service.dart';
+import '../../services/advisory_service.dart';
 
 class RAEDashboard extends StatefulWidget {
   const RAEDashboard({super.key});
@@ -64,9 +68,13 @@ class _RAEDashboardState extends State<RAEDashboard> {
                       children: [
                         _buildActionsGrid(context),
                         const SizedBox(height: 20),
+                        _buildMyFarmersSection(),
+                        const SizedBox(height: 20),
                         _buildMyConversationsSection(),
                         const SizedBox(height: 20),
                         _buildRecentAlerts(),
+                        const SizedBox(height: 20),
+                        _buildDistrictAdvisoriesSection(),
                         const SizedBox(height: 20),
                         _buildQuickActionsRow(context),
                         const SizedBox(height: 80),
@@ -378,6 +386,155 @@ class _RAEDashboardState extends State<RAEDashboard> {
                     fontSize: 11, color: Color(0xFF9E9E9E))),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── My Farmers section ────────────────────────────────────────────────
+
+  Widget _buildMyFarmersSection() {
+    final uid = _fbUser?.uid ?? '';
+    return FutureBuilder<List<Farmer>>(
+      future: FarmerService().getFarmers(uid),
+      builder: (context, snapshot) {
+        final farmers = snapshot.data ?? [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.people, size: 18, color: Color(0xFF2E9B33)),
+                    SizedBox(width: 8),
+                    Text('My Farmers',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const FarmerListScreen()),
+                  ),
+                  child: const Text('View All',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF2E9B33))),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3)),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Stats row
+                  Row(
+                    children: [
+                      _farmerStatChip('${farmers.length}', 'Registered'),
+                      const SizedBox(width: 12),
+                      _farmerStatChip(
+                          '${farmers.map((f) => f.village).toSet().length}',
+                          'Villages'),
+                      const SizedBox(width: 12),
+                      _farmerStatChip(
+                          '${farmers.fold<double>(0, (s, f) => s + f.landArea).toStringAsFixed(0)}',
+                          'Acres'),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // Recent farmers or register CTA
+                  if (farmers.isEmpty)
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const FarmerListScreen()),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: _green.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _green.withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.person_add, color: Color(0xFF2E9B33)),
+                            SizedBox(width: 8),
+                            Text('Register Your First Farmer',
+                                style: TextStyle(
+                                    color: Color(0xFF2E9B33),
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ...farmers.take(3).map((f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: _green.withOpacity(0.12),
+                                child: Text(f.name.isNotEmpty ? f.name[0] : '?',
+                                    style: TextStyle(
+                                        color: _green,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(f.name,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600)),
+                                    Text(
+                                        '${f.village} · ${f.cropType} · ${f.landArea.toStringAsFixed(1)} acres',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[500])),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _farmerStatChip(String value, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(label,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+        ],
       ),
     );
   }
@@ -708,6 +865,127 @@ class _RAEDashboardState extends State<RAEDashboard> {
     );
   }
 
+  // ── District Advisories ─────────────────────────────────────────────
+
+  Widget _buildDistrictAdvisoriesSection() {
+    final uid = _fbUser?.uid ?? '';
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _supabase
+          .from('profiles')
+          .select('district')
+          .eq('uid', uid)
+          .maybeSingle(),
+      builder: (context, profileSnap) {
+        final district = profileSnap.data?['district']?.toString() ?? '';
+        if (district.isEmpty) return const SizedBox.shrink();
+
+        return StreamBuilder<List<Advisory>>(
+          stream: AdvisoryService().advisoriesForDistrictStream(district),
+          builder: (context, snapshot) {
+            final advisories = snapshot.data ?? [];
+            if (advisories.isEmpty) return const SizedBox.shrink();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.campaign, size: 18, color: Color(0xFF7B1FA2)),
+                        SizedBox(width: 8),
+                        Text('District Advisories',
+                            style: TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const RaeAdvisoriesScreen()),
+                      ),
+                      child: const Text('View All',
+                          style:
+                              TextStyle(fontSize: 13, color: Color(0xFF2E9B33))),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ...advisories.take(3).map((a) {
+                  final diff = DateTime.now().difference(a.createdAt);
+                  String timeStr;
+                  if (diff.inMinutes < 60) {
+                    timeStr = '${diff.inMinutes}m ago';
+                  } else if (diff.inHours < 24) {
+                    timeStr = '${diff.inHours}h ago';
+                  } else if (diff.inDays < 7) {
+                    timeStr = '${diff.inDays}d ago';
+                  } else {
+                    timeStr =
+                        '${a.createdAt.day}/${a.createdAt.month}/${a.createdAt.year}';
+                  }
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const RaeAdvisoriesScreen()),
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: const Border(
+                          left: BorderSide(
+                              color: Color(0xFF7B1FA2), width: 4),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(a.title,
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                              Text(timeStr,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[400])),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(a.content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600])),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ── Quick Actions row ─────────────────────────────────────────────────
 
   Widget _buildQuickActionsRow(BuildContext context) {
@@ -794,6 +1072,12 @@ class _RAEDashboardState extends State<RAEDashboard> {
             setState(() => _fabOpen = false);
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const EarningsScreen()));
+          }),
+          const SizedBox(height: 8),
+          _fabOption(context, Icons.people, 'My Farmers', () {
+            setState(() => _fabOpen = false);
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const FarmerListScreen()));
           }),
           const SizedBox(height: 8),
           _fabOption(context, Icons.manage_accounts_outlined, 'My Profile', () {

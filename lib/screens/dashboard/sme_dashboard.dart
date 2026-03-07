@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../../services/sme_service.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_screen.dart';
+import '../sme/sme_advisories_screen.dart';
+import '../../services/advisory_service.dart';
 
 /// SME District Advisor Dashboard
 ///
@@ -83,6 +85,11 @@ class _SMEDashboardState extends State<SMEDashboard> {
 
                     // ── My Activity Log ────────────────────────────
                     _buildActivityLogSection(),
+
+                    const SizedBox(height: 20),
+
+                    // ── My Advisories ──────────────────────────────
+                    _buildAdvisoriesSection(),
 
                     // Bottom padding so FAB doesn't cover last card
                     const SizedBox(height: 80),
@@ -1064,6 +1071,113 @@ class _SMEDashboardState extends State<SMEDashboard> {
   }
 
   // -----------------------------------------------------------------
+  // My Advisories Section
+  // -----------------------------------------------------------------
+
+  Widget _buildAdvisoriesSection() {
+    return StreamBuilder<List<Advisory>>(
+      stream: AdvisoryService().advisoriesBySmeStream(_smeUid),
+      builder: (context, snapshot) {
+        final advisories = snapshot.data ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.campaign_outlined, size: 18, color: Color(0xFF7B2FDC)),
+                const SizedBox(width: 8),
+                const Text(
+                  'My Advisories',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SmeAdvisoriesScreen()),
+                  ),
+                  child: Text(
+                    advisories.isEmpty ? 'Post One' : 'View All',
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF7B2FDC)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (advisories.isEmpty)
+              _buildEmptyCard('No advisories posted yet', Icons.campaign_outlined)
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Column(
+                    children: advisories.take(3).map((a) {
+                      final diff = DateTime.now().difference(a.createdAt);
+                      String timeStr;
+                      if (diff.inMinutes < 60) {
+                        timeStr = '${diff.inMinutes}m ago';
+                      } else if (diff.inHours < 24) {
+                        timeStr = '${diff.inHours}h ago';
+                      } else {
+                        timeStr = '${diff.inDays}d ago';
+                      }
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            left: const BorderSide(color: Color(0xFF7B2FDC), width: 4),
+                            bottom: BorderSide(color: Colors.grey[100]!, width: 1),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(a.title,
+                                      style: const TextStyle(
+                                          fontSize: 14, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  Text(a.content,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 12, color: Colors.grey[600])),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(timeStr,
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey[400])),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // -----------------------------------------------------------------
   // Empty State Card
   // -----------------------------------------------------------------
 
@@ -1141,6 +1255,18 @@ class _SMEDashboardState extends State<SMEDashboard> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('All Issues – Coming Soon')),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.campaign_outlined),
+                title: const Text('Advisories'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SmeAdvisoriesScreen()),
                   );
                 },
               ),
