@@ -695,12 +695,15 @@ class _RAEDashboardState extends State<RAEDashboard> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        displayTitle,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: isPending ? Colors.orange.shade800 : Colors.black87,
+                      Flexible(
+                        child: Text(
+                          displayTitle,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: isPending ? Colors.orange.shade800 : Colors.black87,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isPending) ...[
