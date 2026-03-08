@@ -698,7 +698,7 @@ class _CatalogueManagementScreenState
                   const SizedBox(height: 12),
                   // Category dropdown
                   DropdownButtonFormField<String>(
-                    value: selectedCat,
+                    initialValue: selectedCat,
                     decoration: _inputDecoration('Category *'),
                     items: _categories
                         .where((c) => c != 'All')
@@ -768,7 +768,7 @@ class _CatalogueManagementScreenState
                       try {
                         if (isEdit) {
                           await _service.updateProduct(
-                            productId: product!.id,
+                            productId: product.id,
                             name: nameCtrl.text.trim(),
                             description: descCtrl.text.trim(),
                             category: selectedCat,

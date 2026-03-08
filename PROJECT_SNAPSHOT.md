@@ -1,5 +1,5 @@
 # TRA FPCL — Project Snapshot
-*Last updated: March 7, 2026 (v6 — Admin Reports, RAE Management & PO PDF export). Hand this file to a new chat to continue work.*
+*Last updated: March 8, 2026 (v7 — RAE Cancelled Orders Tab, Admin Suppliers Screen & Chat Clarification). Hand this file to a new chat to continue work.*
 
 ---
 
@@ -299,7 +299,7 @@ Features:
 - "Mark as Delivered" button on dispatched bulk POs
 - All dispatch/invoice/delivery calls now use `raeOrder.orderUuid` (real UUID)
 
-### ✅ v6: Admin Reports, RAE Management & PO PDF Export (latest session)
+### ✅ v6: Admin Reports, RAE Management & PO PDF Export
 
 #### New: `lib/screens/admin/reports_screen.dart`
 - Blue header with back button
@@ -334,17 +334,50 @@ Features:
 - New methods: `getReportData()` (6-month order stats + district grouping), `getRaes()` (profiles + order stats per RAE)
 - Demo/fallback data for both (app usable with empty DB)
 
+### ✅ v7: RAE Cancelled Orders Tab, Admin Suppliers Screen & Chat Clarification (latest session)
+
+#### Modified: `lib/screens/rae/track_orders_screen.dart`
+- Added **third "Cancelled" tab** to separate cancelled orders from completed ones
+- TabController now has `length: 3` instead of 2
+- Tab bar shows dynamic counts: Active / Completed / Cancelled
+- `_buildOrderList()` updated with `cancelled` parameter to filter `status == 'cancelled'`
+- Empty state for cancelled tab shows icon + "No cancelled orders" message
+- Improves UX by preventing cancelled orders from appearing in "Completed" tab
+
+#### New: `lib/screens/admin/suppliers_screen.dart`
+- Full supplier management screen accessed from Admin Dashboard "Suppliers" quick action
+- Blue header with back button + supplier count badge
+- 2 stat cards: Total Suppliers, Registered
+- Search bar filters suppliers by name or district in real-time
+- Supplier cards show:
+  * Avatar with initials (blue accent)
+  * Name, district (with location icon)
+  * Active status badge (green)
+  * Supplier ID (truncated UID)
+  * "View Performance" button (currently shows snackbar placeholder)
+- Wired to `AdminService.getSuppliers()` (queries profiles table for SUPPLIER role)
+- Empty state: "No suppliers found" with icon
+
+#### Modified: `lib/screens/admin/admin_dashboard.dart`
+- Removed unused `_snack()` helper function
+- "Suppliers" quick action now navigates to `SuppliersScreen()` instead of showing placeholder SnackBar
+- Added import for `suppliers_screen.dart`
+
+#### Chat System — Status Clarification
+**The chat system is COMPLETE and fully functional**, contrary to outdated notes in PROJECT_SNAPSHOT:
+- `lib/screens/chat/chat_screen.dart` — Real-time chat between RAE and SME
+- Features: message streaming, send/receive, green (RAE) / purple (SME) bubbles, auto-scroll, read receipts
+- `messages` table exists in Supabase with proper indexing and realtime streaming enabled
+- `conversations` table tracks last message, unread counts, SME assignment
+- RAE can request advisory → creates pending conversation → SME accepts → chat activates
+- Both RAE and SME dashboards show active conversations with unread badges
+- Tapping a conversation opens full functional chat screen with message input
+
 ---
 
 ## 6. What Is Left (TODO)
 
 ### 🟡 Medium Priority — Incomplete Features
-
-#### Chat Screen (within SME dashboard)
-- Tapping a conversation currently shows: `"Chat interface – Coming Soon"` SnackBar
-- Need to build: `lib/screens/chat/chat_screen.dart`
-- Need to create: `messages` table in Supabase (id, conversation_id, sender_uid, content, created_at)
-- Realtime messaging using Supabase streams
 
 #### Farmer Registration (RAE flow)
 - RAEs should be able to register farmers they serve
@@ -356,9 +389,6 @@ Features:
 
 ### 🟢 Low Priority / Polish
 - **Push notifications** — Firebase Cloud Messaging not integrated
-- **Cancelled order view** — RAE's "Completed" tab shows `cancelled` orders mixed in; a dedicated Cancelled tab would improve UX
-- **Admin — Suppliers screen** — "Suppliers" quick action tile in Admin Dashboard still shows a SnackBar placeholder
-- **SME Dashboard chat** — conversations are view-only; full chat not built
 
 ---
 

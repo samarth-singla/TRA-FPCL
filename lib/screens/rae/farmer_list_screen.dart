@@ -130,7 +130,7 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
           _statChip('$villages', 'Villages', Icons.location_on,
               const Color(0xFF1565C0)),
           const SizedBox(width: 10),
-          _statChip('${totalLand.toStringAsFixed(1)}', 'Acres',
+          _statChip(totalLand.toStringAsFixed(1), 'Acres',
               Icons.landscape, const Color(0xFFF57C00)),
         ],
       ),

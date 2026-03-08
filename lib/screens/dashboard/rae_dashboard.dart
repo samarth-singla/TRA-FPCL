@@ -449,7 +449,7 @@ class _RAEDashboardState extends State<RAEDashboard> {
                           'Villages'),
                       const SizedBox(width: 12),
                       _farmerStatChip(
-                          '${farmers.fold<double>(0, (s, f) => s + f.landArea).toStringAsFixed(0)}',
+                          farmers.fold<double>(0, (s, f) => s + f.landArea).toStringAsFixed(0),
                           'Acres'),
                     ],
                   ),

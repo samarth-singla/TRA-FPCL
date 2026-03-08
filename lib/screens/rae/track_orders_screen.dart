@@ -21,7 +21,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -45,6 +45,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
                 children: [
                   _buildOrderList(active: true),
                   _buildOrderList(active: false),
+                  _buildOrderList(cancelled: true),
                 ],
               ),
             ),
@@ -117,6 +118,8 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
             .length;
         final completed =
             mine.where((o) => o['status'] == 'delivered').length;
+        final cancelled =
+            mine.where((o) => o['status'] == 'cancelled').length;
 
         return Container(
           color: Colors.white,
@@ -128,6 +131,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
             tabs: [
               Tab(text: 'Active ($active)'),
               Tab(text: 'Completed ($completed)'),
+              Tab(text: 'Cancelled ($cancelled)'),
             ],
           ),
         );
@@ -137,7 +141,7 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
 
   // ── Order list ────────────────────────────────────────────────────────
 
-  Widget _buildOrderList({required bool active}) {
+  Widget _buildOrderList({bool active = false, bool cancelled = false}) {
     final uid = _fbUser?.uid ?? '';
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _supabase.from('orders').stream(primaryKey: ['id']),
@@ -159,18 +163,41 @@ class _TrackOrdersScreenState extends State<TrackOrdersScreen>
             return db.compareTo(da);
           });
 
-        final filtered = active
-            ? mine
-                .where((o) =>
-                    o['status'] == 'pending' ||
-                    o['status'] == 'confirmed' ||
-                    o['status'] == 'dispatched' ||
-                    o['status'] == 'shipped')
-                .toList()
-            : mine.where((o) => o['status'] == 'delivered').toList();
+        final filtered = cancelled
+            ? mine.where((o) => o['status'] == 'cancelled').toList()
+            : active
+                ? mine
+                    .where((o) =>
+                        o['status'] == 'pending' ||
+                        o['status'] == 'confirmed' ||
+                        o['status'] == 'dispatched' ||
+                        o['status'] == 'shipped')
+                    .toList()
+                : mine.where((o) => o['status'] == 'delivered').toList();
 
         // Fall back to demo data if empty
         if (filtered.isEmpty) {
+          if (cancelled) {
+            // Show empty state for cancelled orders
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cancel_outlined,
+                        size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No cancelled orders',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          
           final demoOrders = active
               ? [
                   {

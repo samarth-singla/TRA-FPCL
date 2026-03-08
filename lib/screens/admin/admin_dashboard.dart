@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import 'order_approval_screen.dart';
 import 'reports_screen.dart';
 import 'rae_management_screen.dart';
+import 'suppliers_screen.dart';
 import '../profile/profile_screen.dart';
 
 /// FPCL Admin Dashboard — Web Portal
@@ -278,7 +279,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 child: _actionTile(
                   icon: Icons.inventory_2_outlined,
                   label: 'Suppliers',
-                  onTap: () => _snack(context, 'Suppliers – Coming Soon'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SuppliersScreen()),
+                  ),
                 ),
               ),
             ],
@@ -617,7 +622,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const Text('No data available',
                     style: TextStyle(color: Color(0xFF6B7280)))
               else
-                ...stats.map((s) => _districtRow(s)).toList(),
+                ...stats.map((s) => _districtRow(s)),
             ],
           ),
         );
@@ -747,11 +752,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────
-
-  void _snack(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
 
   String _fmtNumber(int n) {
     if (n >= 1000) {
