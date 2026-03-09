@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'wallet_service.dart';
 
 /// Model for a single conversation entry
 class ConversationItem {
@@ -258,6 +259,180 @@ class SmeService {
         })
         .eq('id', conversationId)
         .eq('status', 'pending'); // Only update if still pending (race condition protection)
+  }
+
+  // -----------------------------------------------------------------------
+  // Order Approval (SME/District Advisor approves and payment is processed)
+  // -----------------------------------------------------------------------
+
+  /// Approve an order as SME (District Advisor).
+  /// This processes payment from the RAE's wallet and updates order status.
+  Future<void> approveOrder({
+    required String orderId,
+    required String smeUid,
+    required String smeName,
+  }) async {
+    try {
+      // Get order details
+      final orderRow = await _supabase
+          .from('orders')
+          .select('rae_uid, total_amount, status, payment_status')
+          .eq('id', orderId)
+          .single();
+
+      final raeUid = orderRow['rae_uid']?.toString() ?? '';
+      final totalAmount = (orderRow['total_amount'] as num?)?.toDouble() ?? 0;
+      final currentStatus = orderRow['status']?.toString() ?? '';
+      final paymentStatus = orderRow['payment_status']?.toString() ?? 'pending';
+
+      // Validate order is in correct state
+      if (currentStatus != 'pending') {
+        throw Exception('Order is not in pending status');
+      }
+      if (paymentStatus != 'pending') {
+        throw Exception('Order payment already processed');
+      }
+
+      // Process payment from RAE's wallet
+      final walletService = WalletService();
+      final txn = await walletService.makePayment(
+        userUid: raeUid,
+        amount: totalAmount,
+        orderId: orderId,
+        description: 'Payment for order (SME approved)',
+        notes: 'Approved by $smeName',
+      );
+
+      // Update order with SME approval and payment status
+      await _supabase.from('orders').update({
+        'payment_status': 'paid',
+        'sme_approved_by': smeUid,
+        'sme_approved_at': DateTime.now().toIso8601String(),
+        'payment_transaction_id': txn.id,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', orderId);
+
+      // Notify RAE about payment and approval
+      await _supabase.from('notifications').insert({
+        'user_uid': raeUid,
+        'title': 'Order Approved - Payment Processed',
+        'message': 'Your order has been approved by District Advisor. ₹${totalAmount.toStringAsFixed(2)} deducted from wallet.',
+        'type': 'success',
+        'reference_type': 'order',
+        'reference_id': orderId,
+        'is_read': false,
+      });
+    } catch (e) {
+      print('⚠️ SmeService.approveOrder error: $e');
+      rethrow;
+    }
+  }
+
+  /// Reject an order as SME (District Advisor).
+  /// No payment is processed since order was never approved.
+  Future<void> rejectOrder({
+    required String orderId,
+    required String smeUid,
+    required String reason,
+  }) async {
+    try {
+      // Get order details
+      final orderRow = await _supabase
+          .from('orders')
+          .select('rae_uid, status')
+          .eq('id', orderId)
+          .single();
+
+      final raeUid = orderRow['rae_uid']?.toString() ?? '';
+      final currentStatus = orderRow['status']?.toString() ?? '';
+
+      if (currentStatus != 'pending') {
+        throw Exception('Order is not in pending status');
+      }
+
+      // Update order to cancelled
+      final notesJson =
+          '{"rejected_by_sme":"$smeUid","rejected_at":"${DateTime.now().toIso8601String()}","rejection_reason":"$reason"}';
+
+      await _supabase.from('orders').update({
+        'status': 'cancelled',
+        'notes': notesJson,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', orderId);
+
+      // Notify RAE
+      await _supabase.from('notifications').insert({
+        'user_uid': raeUid,
+        'title': 'Order Rejected',
+        'message': 'Your order was rejected by District Advisor. Reason: $reason',
+        'type': 'warning',
+        'reference_type': 'order',
+        'reference_id': orderId,
+        'is_read': false,
+      });
+    } catch (e) {
+      print('⚠️ SmeService.rejectOrder error: $e');
+      rethrow;
+    }
+  }
+
+  /// Get pending orders for SME's district
+  Future<List<Map<String, dynamic>>> getPendingOrdersForDistrict(String smeUid) async {
+    try {
+      // Get SME's district
+      final smeProfile = await _supabase
+          .from('profiles')
+          .select('district')
+          .eq('uid', smeUid)
+          .maybeSingle();
+
+      final smeDistrict = smeProfile?['district']?.toString() ?? '';
+      if (smeDistrict.isEmpty) return [];
+
+      // Get all pending orders
+      final orders = await _supabase
+          .from('orders')
+          .select('id, rae_uid, total_amount, created_at, status, payment_status')
+          .eq('status', 'pending')
+          .order('created_at', ascending: false);
+
+      // Filter by district through RAE profiles
+      final raeUids = (orders as List)
+          .map((o) => o['rae_uid']?.toString() ?? '')
+          .where((u) => u.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (raeUids.isEmpty) return [];
+
+      final raeProfiles = await _supabase
+          .from('profiles')
+          .select('uid, name, district')
+          .inFilter('uid', raeUids);
+
+      final districtOrders = <Map<String, dynamic>>[];
+      for (final order in orders) {
+        final raeUid = order['rae_uid']?.toString() ?? '';
+        final raeProfile = (raeProfiles as List).firstWhere(
+          (p) => p['uid'] == raeUid,
+          orElse: () => <String, dynamic>{},
+        );
+        final raeDistrict = raeProfile['district']?.toString() ?? '';
+
+        if (raeDistrict == smeDistrict) {
+          districtOrders.add({
+            ...order,
+            'rae_name': raeProfile['name']?.toString() ?? 'RAE Agent',
+            'district': raeDistrict,
+          });
+        }
+      }
+
+      return districtOrders;
+    } catch (e) {
+      print('⚠️ SmeService.getPendingOrdersForDistrict error: $e');
+      return [];
+    }
   }
 
   // -----------------------------------------------------------------------

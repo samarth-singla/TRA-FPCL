@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'wallet_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
@@ -34,6 +35,9 @@ class OrderSummary {
   final DateTime? approvedAt;
   final String? supplierUid;
   final String? supplierName;
+  final String paymentStatus; // pending | awaiting_sme_approval | paid | refunded
+  final DateTime? smeApprovedAt;
+  final String? smeApprovedBy;
 
   const OrderSummary({
     required this.id,
@@ -50,7 +54,14 @@ class OrderSummary {
     this.approvedAt,
     this.supplierUid,
     this.supplierName,
+    this.paymentStatus = 'pending',
+    this.smeApprovedAt,
+    this.smeApprovedBy,
   });
+  
+  bool get isPaymentPending => paymentStatus == 'pending' || paymentStatus == 'awaiting_sme_approval';
+  bool get isPaid => paymentStatus == 'paid';
+  bool get isRefunded => paymentStatus == 'refunded';
 }
 
 class DistrictStat {
@@ -211,7 +222,7 @@ class AdminService {
     try {
       final rows = await _supabase
           .from('orders')
-          .select('id, rae_uid, status, total_amount, created_at, notes')
+          .select('id, rae_uid, status, total_amount, created_at, notes, payment_status, sme_approved_at, sme_approved_by')
           .eq('status', 'pending')
           .order('created_at', ascending: false)
           .limit(limit);
@@ -231,13 +242,13 @@ class AdminService {
       if (status != null) {
         rows = await _supabase
             .from('orders')
-            .select('id, rae_uid, status, total_amount, created_at, notes')
+            .select('id, rae_uid, status, total_amount, created_at, notes, payment_status, sme_approved_at, sme_approved_by')
             .eq('status', status)
             .order('created_at', ascending: false);
       } else {
         rows = await _supabase
             .from('orders')
-            .select('id, rae_uid, status, total_amount, created_at, notes')
+            .select('id, rae_uid, status, total_amount, created_at, notes, payment_status, sme_approved_at, sme_approved_by')
             .order('created_at', ascending: false);
       }
       return _enrichOrders(rows);
@@ -326,6 +337,11 @@ class AdminService {
         approvedAt: approvedAt,
         supplierUid: supplierUid,
         supplierName: supplierName,
+        paymentStatus: o['payment_status']?.toString() ?? 'pending',
+        smeApprovedAt: o['sme_approved_at'] != null 
+            ? DateTime.tryParse(o['sme_approved_at'].toString())
+            : null,
+        smeApprovedBy: o['sme_approved_by']?.toString(),
       );
     }).toList();
   }
@@ -442,13 +458,72 @@ class AdminService {
   }
 
   Future<void> rejectOrder(String orderId, String reason) async {
-    final notesJson =
-        '{"rejected_reason":"$reason","rejected_at":"${DateTime.now().toIso8601String()}"}';
-    await _supabase.from('orders').update({
-      'status': 'cancelled',
-      'notes': notesJson,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', orderId);
+    try {
+      // First, get the order details to check payment status
+      final orderRow = await _supabase
+          .from('orders')
+          .select('rae_uid, total_amount, payment_status, sme_approved_by')
+          .eq('id', orderId)
+          .single();
+
+      final raeUid = orderRow['rae_uid']?.toString() ?? '';
+      final totalAmount = (orderRow['total_amount'] as num?)?.toDouble() ?? 0;
+      final paymentStatus = orderRow['payment_status']?.toString() ?? 'pending';
+      final smeApprovedBy = orderRow['sme_approved_by']?.toString();
+
+      // Check if payment was made (SME approved and paid)
+      final needsRefund = (paymentStatus == 'paid') && (smeApprovedBy != null);
+
+      final notesJson =
+          '{"rejected_reason":"$reason","rejected_at":"${DateTime.now().toIso8601String()}","refunded":"$needsRefund"}';
+
+      // If payment was made, process refund
+      if (needsRefund && raeUid.isNotEmpty && totalAmount > 0) {
+        final walletService = WalletService();
+        final txn = await walletService.refund(
+          userUid: raeUid,
+          amount: totalAmount,
+          orderId: orderId,
+          description: 'Refund for rejected order',
+          notes: 'Admin rejected order after SME approval. Reason: $reason',
+        );
+
+        // Update order with refund info
+        await _supabase.from('orders').update({
+          'status': 'cancelled',
+          'notes': notesJson,
+          'payment_status': 'refunded',
+          'refund_transaction_id': txn.id,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', orderId);
+
+        // Notify RAE about refund
+        await notifyRAE(
+          raeUid: raeUid,
+          title: 'Order Rejected - Refund Processed',
+          message: 'Your order has been rejected. ₹${totalAmount.toStringAsFixed(2)} has been refunded to your wallet.',
+        );
+      } else {
+        // No payment was made, just cancel the order
+        await _supabase.from('orders').update({
+          'status': 'cancelled',
+          'notes': notesJson,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', orderId);
+
+        // Notify RAE about cancellation
+        if (raeUid.isNotEmpty) {
+          await notifyRAE(
+            raeUid: raeUid,
+            title: 'Order Rejected',
+            message: 'Your order has been rejected by the admin.',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ AdminService.rejectOrder error: $e');
+      rethrow;
+    }
   }
 
   Future<void> markDelivered(String orderId) async {
