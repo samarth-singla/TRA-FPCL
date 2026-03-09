@@ -65,6 +65,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
       ),
       floatingActionButton: _buildFab(context),
+      // Move FAB to bottom-left so it doesn't overlap the reCAPTCHA badge
+      // that Firebase phone auth injects in the bottom-right corner on web.
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
