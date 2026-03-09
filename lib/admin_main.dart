@@ -29,12 +29,17 @@ void main() async {
   runApp(const AdminPortalApp());
 }
 
+/// Global navigator key — used by AdminAuthWrapper to clear the route stack
+/// when sign-out fires so the login screen is immediately visible.
+final _navigatorKey = GlobalKey<NavigatorState>();
+
 class AdminPortalApp extends StatelessWidget {
   const AdminPortalApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'FPCL Admin Portal',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -69,6 +74,11 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
     super.initState();
     _user = _firebaseAuth.currentUser;
     _firebaseAuth.authStateChanges().listen((user) async {
+      // When signed out: clear the navigator stack so any pushed sub-routes
+      // (reports, RAE management, etc.) don't hide the login screen.
+      if (user == null) {
+        _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      }
       if (mounted) {
         setState(() {
           _user = user;
@@ -412,7 +422,11 @@ class _AdminOtpScreenState extends State<AdminOtpScreen> {
     setState(() => _isLoading = true);
     try {
       await _authService.verifyOTPWithRole(otp, 'ADMIN');
-      // AuthWrapper will pick up the Firebase auth state change automatically.
+      // Pop back to the root route so AdminAuthWrapper (which has already
+      // rebuilt to AdminDashboard) becomes visible instead of this OTP screen.
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);

@@ -1,1 +1,0 @@
-- Having to reload Admin portal to login and to logout.
