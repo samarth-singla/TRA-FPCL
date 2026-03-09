@@ -732,7 +732,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => const ProfileScreen()),
+                      builder: (_) => const ProfileScreen(showSync: false)),
                 );
               },
             ),

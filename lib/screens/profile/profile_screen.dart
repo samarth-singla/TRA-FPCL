@@ -11,7 +11,9 @@ import '../../services/offline_sync_service.dart';
 /// - Shows role badge, last sync time, and an offline sync trigger.
 /// - Accent colour adapts per role.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  /// Set to false to hide the offline-sync card (e.g. on the web admin portal).
+  final bool showSync;
+  const ProfileScreen({super.key, this.showSync = true});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -441,8 +443,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 12),
 
-            // ── Offline sync card ────────────────────────────────────
-            _buildSyncCard(accent),
+            // ── Offline sync card (mobile only) ──────────────────────
+            if (widget.showSync) _buildSyncCard(accent),
 
             const SizedBox(height: 20),
 
