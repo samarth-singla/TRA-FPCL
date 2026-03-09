@@ -159,7 +159,14 @@ class AuthService {  // Singleton pattern
   Future<void> _signInWithCredential(firebase_auth.PhoneAuthCredential credential) async {
     try {
       print('🔄 Signing in with credential...');
-      
+
+      // Pre-cache the selected role BEFORE Firebase sign-in so that when
+      // authStateChanges() fires and DashboardRouter rebuilds, it immediately
+      // reads the correct role from cache (avoiding a stale-Supabase race).
+      if (_selectedRole != null) {
+        await cacheRole(_selectedRole!);
+      }
+
       // Sign in with Firebase
       final userCredential = await _firebaseAuth.signInWithCredential(credential);
       final user = userCredential.user;
